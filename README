@@ -1,0 +1,56 @@
+WinSend
+-------
+
+This is a first go at implementing the Tk send command for Tk under MS
+Windows using COM to handle the registration and interprocess
+communication for us. Briefly this package when loaded into an
+interpreter will automatically register the interp in the system's
+running object table. The winsend interps command can be used to show
+all the registered interpreters and unlike using DDE this command will
+not be blocked by badly behaving windows applications.
+
+An example (from tkcon):         from a concurrent tclsh:
+  % package require winsend  |     % package require winsend
+  0.5                        |     0.5
+  % winsend interps          |     % winsend interps
+  tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
+                             |     % winsend send tkcon.tcl set x 1
+                             |     1
+  % set x                    |
+  1                          |
+  % winsend send TCLSH.EXE set y 2
+                             |     % after 2000 {set zx 1} ; vwait zx
+  2                          |     % set y
+                             |     2
+                             |     % exit
+  % winsend interps          |
+  tkcon.tcl                  |
+
+As you can see from the above session - we require an event loop to be
+running to handle the incoming send. Technically, this is because we
+are using an Apartment threaded object and COM apartments serialize
+access to object by using the Windows message queue. A future version
+could side-step this by creating a free-threaded object but we are
+trying to implement Tk's send here.
+
+An interesting side-effect is that we can access the running tcl
+interpreter from any COM based scripting language. Here is an example
+of a VB script file you can run using 'cscript test.vbs' under
+windows. It will also work from MS Words macro editor etc. You need to
+start up an interpreter and load the winsend package (for instance -
+using tkcon):
+
+Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
+interp.Send "puts {Hello from VB Script}"
+WScript.Echo interp.Send("info tcl")
+
+You should see the message printed in your tkcon window and see your
+Tcl version printed in your DOS box.
+
+See
+  http://tclsoap.sourceforge.net/winsend.html
+and
+  http://prdownloads.sourceforge.net/tclsoap/winsend-0.5.zip
+for the docs (this document) and code respectively.
+
+Pat Thoyts.
