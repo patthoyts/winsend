@@ -292,6 +292,7 @@ TESTFLAGS = $(TESTFLAGS) -file $(TESTPAT)
 
 all:	    setup $(PROJECT)
 $(PROJECT): setup $(PRJLIB)
+doc:        setup $(DOCDIR)\winsend.html
 install:    install-binaries install-libraries install-docs
 
 !if "$(OS)" == "Windows_NT"  || "$(MSVCDIR)" == "IDE"
@@ -375,6 +376,9 @@ $<
 !endif
 	$<
 
+{$(DOCDIR)}.man{$(DOCDIR)}.html::
+	mpexpand html $< $@
+
 .SUFFIXES:
 .SUFFIXES:.c .rc
 
@@ -393,10 +397,12 @@ install-binaries:
 
 install-libraries:
 	@echo Installing library files to '$(SCRIPT_INSTALL_DIR)'
-	@if exist $(LIBDIR) $(CPY) $(LIBDIR)\*.tcl $(SCRIPT_INSTALL_DIR) >NUL
+	@if exist $(LIBDIR) $(CPY) $(LIBDIR)\*.tcl "$(SCRIPT_INSTALL_DIR)" >NUL
 	@echo cd "$(SCRIPT_INSTALL_DIR:\=/)" ; pkg_mkIndex . | $(TCLSH)
 
 install-docs:
+	@echo Installing documentation files to '$(DOC_INSTALL_DIR)'
+	@if exist $(DOCDIR) $(CPY) $(DOCDIR)\*.html "$(DOC_INSTALL_DIR)" >NUL
 
 #---------------------------------------------------------------------
 # Clean up
