@@ -12,8 +12,8 @@
 TCLROOT =/opt/tcl
 
 VER     =05
-DBGX    =d
-DBGFLAGS=-g -D_DEBUG
+DBGX    =#d
+DBGFLAGS=#-g -D_DEBUG
 
 CC      =gcc
 DLLWRAP =dllwrap
@@ -21,7 +21,7 @@ DLLTOOL =dlltool
 RM      =rm -f
 CFLAGS  =-Wall -I$(TCLROOT)/include -DUSE_TCL_STUBS $(DBGFLAGS)
 LDFLAGS =-L$(TCLROOT)/lib
-LIBS    =-ltclstub83${DBGX} -lole32 -loleaut32 -ladvapi32 -luuid
+LIBS    =-ltclstub84${DBGX} -lole32 -loleaut32 -ladvapi32 -luuid
 
 DLL     =winsend${VER}${DBGX}.dll
 DEFFILE =winsend.def

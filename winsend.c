@@ -49,7 +49,8 @@ typedef struct WinsendPkg_t {
     Tcl_Command token;          /* Winsend command token */
     IStream *stream;            /* stream to use for thread marshalling */
     HANDLE   handle;            /* handle to the asynchronous registration thread */
-    HRESULT  reg_err;
+    DWORD    threadid;          /* the thread id of the async registration thread */
+    HRESULT  reg_err;           /* the error code returned by the async registration */
 } WinsendPkg;
 
 static void Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp);
@@ -115,6 +116,7 @@ Winsend_Init(Tcl_Interp* interp)
         return TCL_ERROR;
     }
     memset(pkg, 0, sizeof(WinsendPkg));
+    pkg->handle = INVALID_HANDLE_VALUE;
 
     /* discover our root name - default to 'tcl'*/
     if (Tcl_Eval(interp, "file tail $::argv0") == TCL_OK)
@@ -144,7 +146,7 @@ Winsend_Init(Tcl_Interp* interp)
                                              RegisterNameAsync,
                                              (void*)pkg,
                                              0,
-                                             &dwThreadID);
+                                             &pkg->threadid);
     }
 
 #else /* ! ASYNC_REGISTRATION */
@@ -261,6 +263,15 @@ Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp)
     pkg->obj->lpVtbl->Release(pkg->obj);
     pkg->obj = NULL;
 
+#ifdef ASYNC_REGISTRATION
+    if (pkg->handle != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(pkg->handle);
+        pkg->handle = INVALID_HANDLE_VALUE;
+    }
+    PostThreadMessage(pkg->threadid, WM_QUIT, 0, 0);
+#endif // ASYNC_REGISTRATION
+
     /* unlock the package data structure. */
     Tcl_Release((ClientData)pkg);
 }
@@ -302,7 +313,7 @@ Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
                 int objc, Tcl_Obj *CONST objv[])
 {
     enum {WINSEND_INTERPS, WINSEND_SEND, WINSEND_APPNAME, WINSEND_TEST};
-    static char* cmds[] = { "interps", "send", "appname", "test", NULL };
+    static const char* cmds[] = { "interps", "send", "appname", "test", NULL };
     int index = 0, r = TCL_OK;
     WinsendPkg *pkg = (WinsendPkg*)clientData;
 
@@ -511,7 +522,7 @@ Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
         BOOL     bForce = TRUE;
         Tcl_Obj *objAppname = objv[2];
         enum {WINSEND_APPNAME_FORCE, WINSEND_APPNAME_INCREMENT};
-        static char *opts[] = {"-force", "-increment", NULL};
+        static const char *opts[] = {"-force", "-increment", NULL};
 
         if (objc == 4) {
             int index = 0;
@@ -747,7 +758,7 @@ RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
 
             if (SUCCEEDED(hr)) {
                 hr = pROT->lpVtbl->Register(pROT,
-                                            ROTFLAGS_REGISTRATIONKEEPSALIVE,
+                                            0 /*ROTFLAGS_REGISTRATIONKEEPSALIVE*/,
                                             pUnknown,
                                             pmk,
                                             pdwCookie);
@@ -790,8 +801,9 @@ RegisterNameAsync(void *clientData)
             {
                 pkg->stream = NULL;
 
-                hr = RegisterName(Tcl_GetUnicode(pkg->appname), pUnknown, FALSE,
-                                  &szNewName, 64, &pkg->ROT_cookie);
+                hr = RegisterName(L"TEST"/*Tcl_GetUnicode(pkg->appname)*/,
+                                  pkg->obj/*pUnknown*/, FALSE,
+                                  &szNewName, 64, &(pkg->ROT_cookie));
                 if (SUCCEEDED(hr))
                     Tcl_SetUnicodeObj(pkg->appname, szNewName, -1);
 
@@ -801,6 +813,17 @@ RegisterNameAsync(void *clientData)
         free(szNewName);
     }
     pkg->reg_err = hr;
+
+    /* pump messages for this apartment */
+    {
+        MSG msg;
+        LTRACE(_T("Start pumping messages in the worker apartment\n"));
+        while (GetMessage(&msg, 0, 0, 0))
+            DispatchMessage(&msg);
+        LTRACE(_T("Worker apartment thread shutting down\n"));
+    }
+
+    CoUninitialize();
     return (DWORD)hr;
 }
 
