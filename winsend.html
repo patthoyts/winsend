@@ -1,26 +1,136 @@
-<!doctype HTML public "-//W3C//DTD HTML 3.0 Final//EN">
-<html>
-<head>
-<title>WinSend 0.3</title>
-</head>
+<! -- winsend.man - Copyright (C) 2002 Pat Thoyts &lt;Pat.Thoyts@bigfoot.com&gt; -->
+<! -- $Id$ -->
+<html><head><title>winsend - winsend </title></head>
+<! -- Generated from winsend.man by tcllib/doctools/mpexpand with fmt.html -->
+<! -- Copyright (c) 2002  -->
+<! -- All rights reserved -->
+<! -- CVS: $Id$ winsend.n -->
 
-<body>
+<h1> winsend(n) 0.4 winsend "winsend"</h1>
+<a name="name"><h2>NAME</h2>
+<p> winsend - send implementation for windows platform
 
-<h1>WinSend - A COM Implementation of the Tk Send Command.</h1>
 
-<p>This is a first go at implementing the Tk <i>send</i> command for
-Tk under MS Windows using COM to handle the registration and
-interprocess communication for us. Briefly this package when loaded
-into an interpreter will automatically register the interp in the
-system's running object table. The <tt>winsend interps</tt> command
-can be used to show all the registered interpreters and unlike using
-DDE this command will not be blocked by badly behaving windows
-applications.</p>
+<a name="synopsis"><h2>SYNOPSIS</h2>
+package require <b>Tcl 8.3</b><br>
+package require <b>winsend ?0.4?</b><br>
+<br><table border=1 width=100% cellspacing=0 cellpadding=0><tr            bgcolor=lightyellow><td bgcolor=lightyellow><table 0 width=100% cellspacing=0 cellpadding=0><tr valign=top ><td ><b class='cmd'>winsend</b> <i class='arg'>command</i> ?<i class='arg'>arguments ...</i>?</td></tr>
+</table></td></tr></table>
+<a name="description"><h2>DESCRIPTION</h2>
+<p>
 
-<pre>
+The <strong>winsend</strong> package is an attempt to provide the complete
+functionality of the Tk <b class='cmd'>send</b> command using the Microsoft Windows
+platform. The two key points are inter-process communications between
+one interpreter and another, and automatic registration of
+interpreters with a central source. With the Tk <b class='cmd'>send</b> command this is
+done via the X Windows server. The <b class='cmd'>winfo interps</b> command returns
+a list of registered interpreters and the <b class='cmd'>send</b> command allows
+you to execute Tcl commands in the named interpreter. Finally <b class='cmd'>tk
+appname</b> allows the programmer to select the registration name.
+
+<p>
+
+There are alternative methods for providing remote command xecution on
+the windows platform. The <strong>comm</strong> package that is now part of 
+<strong>tcllib</strong> provides cross-platform remote command execution by the
+use of TCP sockets. The disadvantage of this package is the lack of
+interpreter registration. Potential clients need to be told of the
+port number to use to communicate with the server application.
+
+<p>
+
+The other method is the <strong>dde</strong> package which is supplied as part of
+the Tcl core. This provides automatic registration and the available
+interpreters can be listed by excuting 
+<b class='cmd'>dde servers TclEval {}</b>. The disadvantage if the DDE system 
+is that a badly written
+windows application can hang your application. DDE uses windows
+messages to do its work. If an application isn't processing it's
+message queue then the dde command given above will never complete.
+
+<p>
+
+An alternative is available using Microsoft's COM technology. COM is
+designed to permit interprocess communication through the use of
+interfaces. There is also a system provided registration object where
+a reference to a running interpreter can be lodged. Querying the list
+of available servers only communicates with the Running Object Table
+(the ROT) and doesn't need to send messages to any
+applications. Sending commands does require the server interpreter to
+be processing events - but if the server is not processing these
+events then the command will time out. This is a significant advantage
+over DDE. Also, because we are using standard OLE automation
+interfaces it becomes possible for any other Automation capable
+application to send commands to Tcl for execution. Such applications
+include Microsoft Office applications, Internet Explorer and many
+others. For instance the following VB script can be run using the
+Windows Scripting Host cscript application using 
+<b class='cmd'>cscript test.vbs</b>
+<p><table><tr><td bgcolor=black>&nbsp;</td><td><pre class='sample'>
+ Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
+ interp.Send "puts {Hello from VB Script}"
+ WScript.Echo interp.Send("info tcl")
+</pre></td></tr></table></p>
+Provided you have an instance of Tcl running registered with 
+<b class='cmd'>winsend appname tkcon.tcl</b> you should see the message appear in
+the Tcl window and the Tcl version should be printed to the cscript
+console window.
+
+<! -- ---------------------------------------------------------- -->
+
+<a name="commands"><h2>COMMANDS</h2>
+
+<dl>
+
+<dt><b class='cmd'>winsend</b> <i class='arg'>command</i> ?<i class='arg'>arguments ...</i>?<dd>
+
+
+<dl>
+<dt><b class='cmd'>interps</b><dd>
+   Get the list of registered interpreter names for use with
+send. Similar to the Tk <b class='cmd'>winfo interps</b> command.
+
+<br><br>
+<dt><b class='cmd'>appname</b> ?<i class='arg'>name</i>?<dd>
+   When called with no arguments this returns the registered name of
+this interpreter. If a single argument is given, this is used to
+re-register the application using the new name. If the registration
+fails for some reason, such as the name is already in use, then an
+error is returned and the old appname remains in use.
+
+<br><br>
+<dt><b class='cmd'>send</b> <i class='arg'>appname</i> <i class='arg'>cmd</i> ?<i class='arg'>arg arg ...</i>?<dd>
+   As for the Tk <b class='cmd'>send</b> command this concatenates <i class='arg'>cmd</i> and
+all <i class='arg'>args</i> and passes the resulting string to the <i class='arg'>appname</i>
+interpreter for evaluation. It returns the result or error from this
+command evaluation.
+
+</dl>
+
+</dl>
+
+<! -- ---------------------------------------------------------- -->
+
+<a name="examples"><h2>EXAMPLES</h2>
+
+<p>
+<p><table><tr><td bgcolor=black>&nbsp;</td><td><pre class='sample'>
+% package require winsend
+0.4
+% winsend appname MyApp
+MyApp
+% winsend send MyApp info tcl
+8.3
+</pre></td></tr></table></p>
+
+<p>
+
+An example session between two interpreters
+<p><table><tr><td bgcolor=black>&nbsp;</td><td><pre class='sample'>
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
-  0.3                        |     0.3
+  0.4                        |     0.4
   % winsend interps          |     % winsend interps
   tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
                              |     % winsend send tkcon.tcl set x 1
@@ -34,35 +144,35 @@ An example (from tkcon):         from a concurrent tclsh:
                              |     % exit
   % winsend interps          |
   tkcon.tcl                  |
-</pre>
+</pre></td></tr></table></p>
 
-<p>As you can see from the above session - we require an event loop to be
-running to handle the incoming send. Technically, this is because we
-are using an Apartment threaded object and COM apartments serialize
-access to object by using the Windows message queue. A future version
-could side-step this by creating a free-threaded object but we are
-trying to implement Tk's <i>send</i> here.</p>
+<! -- ---------------------------------------------------------- -->
 
-<p>An interesting side-effect is that we can access the running Tcl
-interpreter from any COM using scripting language. Here is an example
-of a VB script file you can run using <tt>cscript test.vbs</tt> under
-windows. It will also work from MS Words macro editor etc. You need to
-start up an interpreter and load the winsend package (for instance -
-using tkcon):</p>
+<a name="downloadandinstallation"><h2>DOWNLOAD and INSTALLATION</h2>
 
-<pre>Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
-interp.Send "puts {Hello from VB Script}"
-WScript.Echo interp.Send("info tcl")</pre>
+The latest version is available at
+<a href="http://prdownloads.sourceforge.net/tclsoap/winsend-0.4.zip">http://prdownloads.sourceforge.net/tclsoap/winsend-0.4.zip</a>
+This includes the source and the DLLs. To install, copy the DLLs and
+the "<strong>pkgIndex.tcl</strong>" file to a subdirectory of your <strong>auto_path</strong>
+variable. For instance, to "<strong>c:/Program Files/Tcl/lib/winsend04/</strong>"
 
-<p>You should see the message printed in your tkcon window and see your
-Tcl version printed in your DOS box.</p>
+<p>
 
-<p>The package containing binaries and source is available from 
-<a href="http://tclsoap.sf.net/winsend.zip">
-http://tclsoap.sf.net/winsend.zip</a></p>
+Documentation is located at 
+<a href="http://tclsoap.sourceforge.net/winsend.html">http://tclsoap.sourceforge.net/winsend.html</a>
 
-<p>Pat Thoyts.</p>
+<! -- ---------------------------------------------------------- -->
 
+<a name="seealso"><h2>SEE ALSO</h2>
+send(n), winfo(n), tk(n)
 
-</body>
-</html>
+<! -- ---------------------------------------------------------- -->
+
+<a name="authors"><h2>AUTHORS</h2>
+Pat Thoyts
+
+<! -- ---------------------------------------------------------- -->
+
+<a name="keywords"><h2>KEYWORDS</h2>
+send, appname, tk, winfo, COM, Automation
+</body></html>
