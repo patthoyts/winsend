@@ -36,7 +36,16 @@ static STDMETHODIMP WinSendCom_Invoke(IDispatch *This, DISPID dispidMember,
                                       VARIANT *pvarResult,
                                       EXCEPINFO *pExcepInfo,
                                       UINT *puArgErr);
-static HRESULT Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult);
+
+static STDMETHODIMP ISupportErrorInfo_QueryInterface(ISupportErrorInfo *This,
+                                                     REFIID riid, void **ppvObject);
+static STDMETHODIMP_(ULONG) ISupportErrorInfo_AddRef(ISupportErrorInfo *This);
+static STDMETHODIMP_(ULONG) ISupportErrorInfo_Release(ISupportErrorInfo *This);
+static STDMETHODIMP ISupportErrorInfo_InterfaceSupportsErrorInfo(ISupportErrorInfo *This,
+                                                                 REFIID riid);
+
+static HRESULT Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult,
+                    EXCEPINFO* pExcepInfo, UINT *puArgErr);
 
 /* ----------------------------------------------------------------------
  * COM Class Helpers
@@ -59,6 +68,14 @@ WinSendCom_CreateInstance(Tcl_Interp *interp, REFIID riid, void **ppv)
         WinSendCom_GetIDsOfNames,
         WinSendCom_Invoke,
     };
+
+    static ISupportErrorInfoVtbl vtbl2 = {
+        ISupportErrorInfo_QueryInterface,
+        ISupportErrorInfo_AddRef,
+        ISupportErrorInfo_Release,
+        ISupportErrorInfo_InterfaceSupportsErrorInfo,
+    };
+
     HRESULT hr = S_OK;
     WinSendCom *obj = NULL;
 
@@ -68,6 +85,7 @@ WinSendCom_CreateInstance(Tcl_Interp *interp, REFIID riid, void **ppv)
         hr = E_OUTOFMEMORY;
     } else {
         obj->lpVtbl = &vtbl;
+        obj->lpVtbl2 = &vtbl2;
         obj->refcount = 0;
         obj->interp = interp;
 
@@ -107,6 +125,10 @@ WinSendCom_QueryInterface(IDispatch *This,
         || memcmp(riid, &IID_IDispatch, sizeof(IID)) == 0) {
         *ppvObject = (void**)this;
         this->lpVtbl->AddRef(This);
+        hr = S_OK;
+    } else if (memcmp(riid, &IID_ISupportErrorInfo, sizeof(IID)) == 0) {
+        *ppvObject = (void**)(this + 1);
+        this->lpVtbl2->AddRef((ISupportErrorInfo*)(this + 1));
         hr = S_OK;
     }
     return hr;
@@ -192,18 +214,56 @@ WinSendCom_Invoke(IDispatch *This, DISPID dispidMember,
             if (pDispParams->cArgs != 1)
                 hr = DISP_E_BADPARAMCOUNT;
             else
-                hr = Send(this, pDispParams->rgvarg[0], pvarResult);
+                hr = Send(this, pDispParams->rgvarg[0], pvarResult, pExcepInfo, puArgErr);
         }
     }
     return hr;
 }
+
+/* ---------------------------------------------------------------------- */
+
+/*
+ * WinSendCom ISupportErrorInfo methods
+ */
+
+static STDMETHODIMP 
+ISupportErrorInfo_QueryInterface(ISupportErrorInfo *This,
+                                 REFIID riid, void **ppvObject)
+{
+    WinSendCom *this = (WinSendCom*)(This - 1);
+    return this->lpVtbl->QueryInterface((IDispatch*)this, riid, ppvObject);
+}
+
+static STDMETHODIMP_(ULONG)
+ISupportErrorInfo_AddRef(ISupportErrorInfo *This)
+{
+    WinSendCom *this = (WinSendCom*)(This - 1);
+    return InterlockedIncrement(&this->refcount);
+}
+
+static STDMETHODIMP_(ULONG)
+ISupportErrorInfo_Release(ISupportErrorInfo *This)
+{
+    WinSendCom *this = (WinSendCom*)(This - 1);
+    return this->lpVtbl->Release((IDispatch*)this);
+}
+
+static STDMETHODIMP
+ISupportErrorInfo_InterfaceSupportsErrorInfo(ISupportErrorInfo *This, REFIID riid)
+{
+    WinSendCom *this = (WinSendCom*)(This - 1);
+    return S_OK; /* or S_FALSE */
+}
+
+/* ---------------------------------------------------------------------- */
+
 
 /* Description:
  *  Evaluates the string in the assigned interpreter. If the result
  *  is a valid address then set to the result returned by the evaluation.
  */
 static HRESULT
-Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult)
+Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult, EXCEPINFO* pExcepInfo, UINT *puArgErr)
 {
     HRESULT hr = S_OK;
     int r = TCL_OK;
@@ -223,6 +283,42 @@ Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult)
                 VariantInit(pvResult);
                 pvResult->vt = VT_BSTR;
                 pvResult->bstrVal = SysAllocString(Tcl_GetUnicode(Tcl_GetObjResult(obj->interp)));
+            }
+            if (r == TCL_ERROR)
+            {
+                hr = DISP_E_EXCEPTION;
+                if (pExcepInfo)
+                {
+                    Tcl_Obj *opError, *opErrorInfo, *opErrorCode;
+                    ICreateErrorInfo *pCEI;
+                    IErrorInfo *pEI;
+                    HRESULT ehr;
+
+                    opError = Tcl_GetObjResult(obj->interp);
+		            opErrorInfo = Tcl_GetVar2Ex(obj->interp, "errorInfo", NULL, TCL_GLOBAL_ONLY);
+                    opErrorCode = Tcl_GetVar2Ex(obj->interp, "errorCode", NULL, TCL_GLOBAL_ONLY);
+
+                    Tcl_ListObjAppendElement(obj->interp, opErrorCode, opErrorInfo);
+
+                    pExcepInfo->bstrDescription = SysAllocString(Tcl_GetUnicode(opError));
+                    pExcepInfo->bstrSource = SysAllocString(Tcl_GetUnicode(opErrorCode));
+                    pExcepInfo->scode = E_FAIL;
+
+                    ehr = CreateErrorInfo(&pCEI);
+                    if (SUCCEEDED(ehr))
+                    {
+                        ehr = pCEI->lpVtbl->SetGUID(pCEI, &IID_IDispatch);
+                        ehr = pCEI->lpVtbl->SetDescription(pCEI, pExcepInfo->bstrDescription);
+                        ehr = pCEI->lpVtbl->SetSource(pCEI, pExcepInfo->bstrSource);
+                        ehr = pCEI->lpVtbl->QueryInterface(pCEI, &IID_IErrorInfo, (void**)&pEI);
+                        if (SUCCEEDED(ehr))
+                        {
+                            SetErrorInfo(0, pEI);
+                            pEI->lpVtbl->Release(pEI);
+                        }
+                        pCEI->lpVtbl->Release(pCEI);
+                    }
+                }
             }
         }
         VariantClear(&v);

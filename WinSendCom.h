@@ -13,6 +13,7 @@
  */
 typedef struct WinSendCom_t {
     IDispatchVtbl *lpVtbl;
+    ISupportErrorInfoVtbl *lpVtbl2;
     long           refcount;
     Tcl_Interp     *interp;
 } WinSendCom;

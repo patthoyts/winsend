@@ -633,7 +633,7 @@ Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp,
     DISPPARAMS dp;
     EXCEPINFO ei;
     UINT uiErr = 0;
-    HRESULT hr = S_OK;
+    HRESULT hr = S_OK, ehr = S_OK;
     Tcl_Obj *cmd = NULL;
 
     cmd = Tcl_ConcatObj(objc - 3, &objv[3]);
@@ -650,13 +650,32 @@ Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp,
     dp.rgvarg = &vCmd;
 
     hr = pdispInterp->lpVtbl->Invoke(pdispInterp, 1, &IID_NULL, LOCALE_SYSTEM_DEFAULT, DISPATCH_METHOD, &dp, &vResult, &ei, &uiErr);
-    if (SUCCEEDED(hr))
+    ehr = VariantChangeType(&vResult, &vResult, 0, VT_BSTR);
+    if (SUCCEEDED(ehr))
+        Tcl_SetObjResult(interp, Tcl_NewUnicodeObj(vResult.bstrVal, -1));
+    if (hr == DISP_E_EXCEPTION)
     {
-        hr = VariantChangeType(&vResult, &vResult, 0, VT_BSTR);
-        if (SUCCEEDED(hr))
-            Tcl_SetObjResult(interp, Tcl_NewUnicodeObj(vResult.bstrVal, -1));
+        Tcl_Obj *opError, *opErrorCode, *opErrorInfo;
+
+        if (ei.bstrSource != NULL)
+        {
+            int len;
+            char * szErrorInfo;
+
+            opError = Tcl_NewUnicodeObj(ei.bstrSource, -1);
+            Tcl_ListObjIndex(interp, opError, 0, &opErrorCode);
+            Tcl_SetObjErrorCode(interp, opErrorCode);
+
+            Tcl_ListObjIndex(interp, opError, 1, &opErrorInfo);
+            szErrorInfo = Tcl_GetStringFromObj(opErrorInfo, &len);
+            Tcl_AddObjErrorInfo(interp, szErrorInfo, len);
+        }
     }
 
+
+    SysFreeString(ei.bstrDescription);
+    SysFreeString(ei.bstrSource);
+    SysFreeString(ei.bstrHelpFile);
     VariantClear(&vCmd);
 
     return (SUCCEEDED(hr) ? TCL_OK : TCL_ERROR);
