@@ -9,8 +9,8 @@
 # full path name of this file's directory.
 
 if {[info exists ::tcl_platform(debug)] && $::tcl_platform(debug)} {
-   package ifneeded winsend 0.4 [list load [file join $dir winsend04d.dll]]
+   package ifneeded winsend 0.5 [list load [file join $dir winsend05d.dll]]
 } else {
-   package ifneeded winsend 0.4 [list load [file join $dir winsend04.dll]]
+   package ifneeded winsend 0.5 [list load [file join $dir winsend05.dll]]
 }
    

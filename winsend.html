@@ -1,12 +1,12 @@
-<! -- winsend.man - Copyright (C) 2002 Pat Thoyts &lt;Pat.Thoyts@bigfoot.com&gt; -->
+<! -- winsend.man - Copyright (C) 2002 Pat Thoyts &amp;lt;Pat.Thoyts@bigfoot.com&amp;gt; -->
 <! -- $Id$ -->
 <html><head><title>winsend - winsend </title></head>
 <! -- Generated from winsend.man by tcllib/doctools/mpexpand with fmt.html -->
-<! -- Copyright (c) 2002  -->
+<! -- Copyright (c) 2002 pat -->
 <! -- All rights reserved -->
 <! -- CVS: $Id$ winsend.n -->
 
-<h1> winsend(n) 0.4 winsend "winsend"</h1>
+<h1> winsend(n) 0.5 winsend &quot;winsend&quot;</h1>
 <a name="name"><h2>NAME</h2>
 <p> winsend - send implementation for windows platform
 
@@ -68,10 +68,10 @@ others. For instance the following VB script can be run using the
 Windows Scripting Host cscript application using 
 <b class='cmd'>cscript test.vbs</b>
 <p><table><tr><td bgcolor=black>&nbsp;</td><td><pre class='sample'>
- Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
- interp.Send "puts {Hello from VB Script}"
- WScript.Echo interp.Send("info tcl")
-</pre></td></tr></table></p>
+ Set interp = GetObject(&quot;\\.\TclInterp\tkcon.tcl&quot;)
+ interp.Send &quot;puts {Hello from VB Script}&quot;
+ WScript.Echo interp.Send(&quot;info tcl&quot;)</pre></td></tr></table></p>
+
 Provided you have an instance of Tcl running registered with 
 <b class='cmd'>winsend appname tkcon.tcl</b> you should see the message appear in
 the Tcl window and the Tcl version should be printed to the cscript
@@ -117,7 +117,7 @@ command evaluation.
 <p>
 <p><table><tr><td bgcolor=black>&nbsp;</td><td><pre class='sample'>
 % package require winsend
-0.4
+0.5
 % winsend appname MyApp
 MyApp
 % winsend send MyApp info tcl
@@ -130,7 +130,7 @@ An example session between two interpreters
 <p><table><tr><td bgcolor=black>&nbsp;</td><td><pre class='sample'>
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
-  0.4                        |     0.4
+  0.5                        |     0.5
   % winsend interps          |     % winsend interps
   tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
                              |     % winsend send tkcon.tcl set x 1
@@ -151,10 +151,10 @@ An example (from tkcon):         from a concurrent tclsh:
 <a name="downloadandinstallation"><h2>DOWNLOAD and INSTALLATION</h2>
 
 The latest version is available at
-<a href="http://prdownloads.sourceforge.net/tclsoap/winsend-0.4.zip">http://prdownloads.sourceforge.net/tclsoap/winsend-0.4.zip</a>
+<a href="http://prdownloads.sourceforge.net/tclsoap/winsend-0.5.zip">http://prdownloads.sourceforge.net/tclsoap/winsend-0.5.zip</a>
 This includes the source and the DLLs. To install, copy the DLLs and
-the "<strong>pkgIndex.tcl</strong>" file to a subdirectory of your <strong>auto_path</strong>
-variable. For instance, to "<strong>c:/Program Files/Tcl/lib/winsend04/</strong>"
+the &quot;<strong>pkgIndex.tcl</strong>&quot; file to a subdirectory of your <strong>auto_path</strong>
+variable. For instance, to &quot;<strong>c:/Program Files/Tcl/lib/winsend05/</strong>&quot;
 
 <p>
 

@@ -1,6 +1,6 @@
 [comment {winsend.man - Copyright (C) 2002 Pat Thoyts &lt;Pat.Thoyts@bigfoot.com&gt;}]
 [comment {$Id$}]
-[manpage_begin winsend n 0.4]
+[manpage_begin winsend n 0.5]
 [moddesc   {winsend}]
 [titledesc {send implementation for windows platform}]
 [require Tcl 8.3]
@@ -103,7 +103,7 @@ command evaluation.
 [para]
 [example {
 % package require winsend
-0.4
+0.5
 % winsend appname MyApp
 MyApp
 % winsend send MyApp info tcl
@@ -116,7 +116,7 @@ An example session between two interpreters
 [example {
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
-  0.4                        |     0.4
+  0.5                        |     0.5
   % winsend interps          |     % winsend interps
   tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
                              |     % winsend send tkcon.tcl set x 1
@@ -137,10 +137,10 @@ An example (from tkcon):         from a concurrent tclsh:
 [section {DOWNLOAD and INSTALLATION}]
 
 The latest version is available at
-[uri {http://prdownloads.sourceforge.net/tclsoap/winsend-0.4.zip}]
+[uri {http://prdownloads.sourceforge.net/tclsoap/winsend-0.5.zip}]
 This includes the source and the DLLs. To install, copy the DLLs and
 the [file pkgIndex.tcl] file to a subdirectory of your [var auto_path]
-variable. For instance, to [file {c:/Program Files/Tcl/lib/winsend04/}]
+variable. For instance, to [file {c:/Program Files/Tcl/lib/winsend05/}]
 
 [para]
 
