@@ -1,0 +1,71 @@
+# Commands covered:  winsend
+#
+# This file contains a collection of tests for the Winsend package commands.
+# Sourcing this file into Tcl runs the tests and generates output for errors.
+# No output means no errors were found.
+#
+# Copyright (c) 2003 by Pat Thoyts <patthoyts@users.sourceforge.net>
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
+# RCS: @(#) $Id$
+
+if {[lsearch [namespace children] ::tcltest] == -1} {
+    package require tcltest
+    namespace import ::tcltest::*
+}
+
+package require winsend
+
+# -------------------------------------------------------------------------
+
+test winsend-1.0 {winsend no args} {
+    list [catch {winsend} msg] $msg
+} {1 {wrong # args: should be "winsend command ?args ...?"}}
+
+test winsend-1.1 {winsend appname: set name} {
+    list [catch {winsend appname test} msg] $msg
+} {0 test}
+
+test winsend-1.2 {winsend appname: retrieve name} {
+    list [catch {winsend appname} msg] $msg
+} {0 test}
+
+test winsend-1.3 {winsend interps: check name} {
+    list [catch {
+        set n [lsearch -exact [winsend interps] test]
+        expr {$n != -1}
+    } msg] $msg
+} {0 1}
+
+test winsend-1.4 {winsend: load into slave interp} {
+    list [catch {
+        interp create slave
+        slave eval {package require winsend; winsend appname testslave}
+    } msg] $msg
+} {0 testslave}
+
+test winsend-1.5 {winsend send: send to slave} {
+    list [catch {
+        set v [winsend send testslave {package provide winsend}]
+        expr {$v == [package provide winsend]}
+    } msg] $msg
+} {0 1}
+
+test winsend-1.6 {winsend send: send error} {
+    list [catch {
+        winsend send testslave {winsend}
+    } msg] $msg
+} {1 {wrong # args: should be "winsend command ?args ...?"}}
+
+# -------------------------------------------------------------------------
+# cleanup
+catch {interp delete slave}
+::tcltest::cleanupTests
+return
+
+# Local variables:
+# mode: tcl
+# indent-tabs-mode: nil
+# End:
