@@ -11,7 +11,7 @@ not be blocked by badly behaving windows applications.
 
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
-  0.3                        |     0.3
+  0.4                        |     0.4
   % winsend interps          |     % winsend interps
   tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
                              |     % winsend send tkcon.tcl set x 1
@@ -50,7 +50,7 @@ Tcl version printed in your DOS box.
 See
   http://tclsoap.sourceforge.net/winsend.html
 and
-  http://tclsoap.sourceforge.net/winsend.zip
+  http://prdownloads.sourceforge.net/tclsoap/winsend-0.4.zip
 for the docs (this document) and code respectively.
 
 Pat Thoyts.

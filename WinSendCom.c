@@ -217,7 +217,7 @@ Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult)
         {
             Tcl_Obj *script = Tcl_NewUnicodeObj(v.bstrVal,
                                                 SysStringLen(v.bstrVal));
-            r = Tcl_EvalObjEx(obj->interp, script, TCL_EVAL_DIRECT);
+            r = Tcl_EvalObjEx(obj->interp, script, TCL_EVAL_DIRECT | TCL_EVAL_GLOBAL);
             if (pvResult)
             {
                 VariantInit(pvResult);

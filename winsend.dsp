@@ -125,6 +125,10 @@ SOURCE=.\WinSendCom.h
 # End Group
 # Begin Source File
 
+SOURCE=.\LICENSE
+# End Source File
+# Begin Source File
+
 SOURCE=.\Readme
 # End Source File
 # Begin Source File
@@ -133,7 +137,11 @@ SOURCE=.\test.vbs
 # End Source File
 # Begin Source File
 
-SOURCE=.\winsend.html
+SOURCE=.\test2.vbs
+# End Source File
+# Begin Source File
+
+SOURCE=.\winsend.man
 # End Source File
 # End Target
 # End Project

@@ -59,8 +59,8 @@ Windows Scripting Host cscript application using
 [example {
  Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
  interp.Send "puts {Hello from VB Script}"
- WScript.Echo interp.Send("info tcl")
-}]
+ WScript.Echo interp.Send("info tcl")}]
+
 Provided you have an instance of Tcl running registered with 
 [cmd {winsend appname tkcon.tcl}] you should see the message appear in
 the Tcl window and the Tcl version should be printed to the cscript
