@@ -1,45 +1,49 @@
-[manpage_begin winsend n 0.6]
-[copyright {2002 Pat Thoyts <patthoyts@users.sourceforge.net>}]
-[comment {$Id$}]
-[moddesc   {winsend}]
-[titledesc {send implementation for windows platform}]
-[require Tcl 8.3]
-[require winsend [opt 0.6]]
-[description]
-[para]
-
-The [package winsend] package is an attempt to provide the complete
-functionality of the Tk [cmd send] command using the Microsoft Windows
+'\"
+'\" Generated from file 'winsend.man' by tcllib/doctools with format 'nroff'
+'\" Copyright (c) 2002 Pat Thoyts <patthoyts@users.sourceforge.net>
+'\"
+.so man.macros
+.TH "winsend" n 0.6  "winsend"
+.BS
+.SH "NAME"
+winsend \- send implementation for windows platform
+'\" $Id$
+.SH "SYNOPSIS"
+package require \fBTcl  8.3\fR
+.sp
+package require \fBwinsend  ?0.6?\fR
+.sp
+\fBwinsend\fR \fIcommand\fR ?\fIarguments ...\fR?\fR
+.sp
+.BE
+.SH "DESCRIPTION"
+.PP
+The \fBwinsend\fR package is an attempt to provide the complete
+functionality of the Tk \fBsend\fR command using the Microsoft Windows
 platform. The two key points are inter-process communications between
 one interpreter and another, and automatic registration of
-interpreters with a central source. With the Tk [cmd send] command this is
-done via the X Windows server. The [cmd "winfo interps"] command returns
-a list of registered interpreters and the [cmd send] command allows
-you to execute Tcl commands in the named interpreter. Finally [cmd "tk
-appname"] allows the programmer to select the registration name.
-
-[para]
-
+interpreters with a central source. With the Tk \fBsend\fR command this is
+done via the X Windows server. The \fBwinfo interps\fR command returns
+a list of registered interpreters and the \fBsend\fR command allows
+you to execute Tcl commands in the named interpreter. Finally \fBtk
+appname\fR allows the programmer to select the registration name.
+.PP
 There are alternative methods for providing remote command xecution on
-the windows platform. The [package comm] package that is now part of 
-[package tcllib] provides cross-platform remote command execution by the
+the windows platform. The \fBcomm\fR package that is now part of
+\fBtcllib\fR provides cross-platform remote command execution by the
 use of TCP sockets. The disadvantage of this package is the lack of
 interpreter registration. Potential clients need to be told of the
 port number to use to communicate with the server application.
-
-[para]
-
-The other method is the [package dde] package which is supplied as part of
+.PP
+The other method is the \fBdde\fR package which is supplied as part of
 the Tcl core. This provides automatic registration and the available
-interpreters can be listed by excuting 
-[cmd "dde servers TclEval {}"]. The disadvantage if the DDE system 
+interpreters can be listed by excuting
+\fBdde servers TclEval {}\fR. The disadvantage if the DDE system
 is that a badly written
 windows application can hang your application. DDE uses windows
 messages to do its work. If an application isn't processing it's
 message queue then the dde command given above will never complete.
-
-[para]
-
+.PP
 An alternative is available using Microsoft's COM technology. COM is
 designed to permit interprocess communication through the use of
 interfaces. There is also a system provided registration object where
@@ -54,66 +58,77 @@ interfaces it becomes possible for any other Automation capable
 application to send commands to Tcl for execution. Such applications
 include Microsoft Office applications, Internet Explorer and many
 others. For instance the following VB script can be run using the
-Windows Scripting Host cscript application using 
-[cmd "cscript test.vbs"]
-[example {
+Windows Scripting Host cscript application using
+\fBcscript test.vbs\fR
+.nf
  Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
  interp.Send "puts {Hello from VB Script}"
- WScript.Echo interp.Send("info tcl")}]
+ WScript.Echo interp.Send("info tcl").fi
 
 Provided you have an instance of Tcl running registered with 
-[cmd {winsend appname tkcon.tcl}] you should see the message appear in
+\fBwinsend appname tkcon.tcl\fR you should see the message appear in
 the Tcl window and the Tcl version should be printed to the cscript
 console window.
 
-[comment {----------------------------------------------------------}]
+'\" ----------------------------------------------------------
 
-[section COMMANDS]
+.SH "COMMANDS"
 
-[list_begin definitions]
 
-[call [cmd winsend] [arg command] [opt [arg "arguments ..."]]]
 
-[list_begin definitions]
-[lst_item "[cmd interps]"]
+
+.TP
+\fBwinsend\fR \fIcommand\fR ?\fIarguments ...\fR?\fR
+
+
+.RS
+
+.TP
+\fBinterps\fR
    Get the list of registered interpreter names for use with
-send. Similar to the Tk [cmd "winfo interps"] command.
+send. Similar to the Tk \fBwinfo interps\fR command.
 
-[lst_item "[cmd appname] [opt [arg name]]"]
+
+.TP
+\fBappname\fR ?\fIname\fR?
    When called with no arguments this returns the registered name of
 this interpreter. If a single argument is given, this is used to
 re-register the application using the new name. If the registration
 fails for some reason, such as the name is already in use, then an
 error is returned and the old appname remains in use.
 
-[lst_item "[cmd send] [arg appname] [arg cmd] [opt [arg {arg arg ...}]]"]
-   As for the Tk [cmd send] command this concatenates [arg cmd] and
-all [arg args] and passes the resulting string to the [arg appname]
+
+.TP
+\fBsend\fR \fIappname\fR \fIcmd\fR ?\fIarg arg ...\fR?
+   As for the Tk \fBsend\fR command this concatenates \fIcmd\fR and
+all \fIargs\fR and passes the resulting string to the \fIappname\fR
 interpreter for evaluation. It returns the result or error from this
 command evaluation.
 
-[list_end]
 
-[list_end]
+.RE
 
-[comment {----------------------------------------------------------}]
 
-[section EXAMPLES]
 
-[para]
-[example {
+'\" ----------------------------------------------------------
+
+.SH "EXAMPLES"
+
+
+.PP
+
+
+.nf
 % package require winsend
 0.6
 % winsend appname MyApp
 MyApp
 % winsend send MyApp info tcl
 8.3
-}]
-
-[para]
-
+.fi
+.PP
 An example session between two interpreters
-[example {
+.nf
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
   0.6                        |     0.6
@@ -130,33 +145,27 @@ An example (from tkcon):         from a concurrent tclsh:
                              |     % exit
   % winsend interps          |
   tkcon.tcl                  |
-}]
-
-[comment {----------------------------------------------------------}]
-
-[section {DOWNLOAD and INSTALLATION}]
-
+.fi
+'\" ----------------------------------------------------------
+.SH "DOWNLOAD and INSTALLATION"
 The latest version is available at
-[uri {http://prdownloads.sourceforge.net/tclsoap/winsend-0.6.zip}]
+\fIhttp://prdownloads.sourceforge.net/tclsoap/winsend-0.6.zip\fR
 This includes the source and the DLLs. To install, copy the DLLs and
-the [file pkgIndex.tcl] file to a subdirectory of your [var auto_path]
-variable. For instance, to [file {c:/Program Files/Tcl/lib/winsend06/}]
-
-[para]
-
-Documentation is located at 
-[uri {http://tclsoap.sourceforge.net/winsend.html}]
-
-[comment {----------------------------------------------------------}]
-
-[see_also send(n) winfo(n) tk(n)]
-
-[comment {----------------------------------------------------------}]
-
-[section AUTHORS]
+the "\fIpkgIndex.tcl\fR" file to a subdirectory of your \fBauto_path\fR
+variable. For instance, to "\fIc:/Program Files/Tcl/lib/winsend06/\fR"
+.PP
+Documentation is located at
+\fIhttp://tclsoap.sourceforge.net/winsend.html\fR
+'\" ----------------------------------------------------------
+.SH "SEE ALSO"
+send(n), winfo(n), tk(n)
+'\" ----------------------------------------------------------
+.SH "AUTHORS"
 Pat Thoyts
-
-[comment {----------------------------------------------------------}]
-
-[keywords send appname tk winfo COM Automation]
-[manpage_end]
+'\" ----------------------------------------------------------
+.SH "KEYWORDS"
+send, appname, tk, winfo, COM, Automation
+.SH "COPYRIGHT"
+.nf
+Copyright (c) 2002 Pat Thoyts <patthoyts@users.sourceforge.net>
+.fi
