@@ -32,9 +32,12 @@ static const char rcsid[] =
 #define ROTFLAGS_ALLOWANYCLIENT           0x02
 #endif /* ! _ROTFLAGS_DEFINED */
 
-#define WINSEND_PACKAGE_VERSION   "0.4"
+#define WINSEND_PACKAGE_VERSION   "0.5"
 #define WINSEND_PACKAGE_NAME      "winsend"
 #define WINSEND_CLASS_NAME        "TclEval"
+
+#define MK_E_MONIKERALREADYREGISTERED \
+    MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0x02A1)
 
 /* Package information structure.
  * This is used to keep interpreter specific details for use when releasing
@@ -45,6 +48,7 @@ typedef struct WinsendPkg_t {
     DWORD ROT_cookie;           /* ROT cookie returned on registration */
     LPUNKNOWN obj;              /* Interface for the registration object */
     Tcl_Command token;          /* Winsend command token */
+    IStream *stream;            /* stream to use for thread marshalling */
 } WinsendPkg;
 
 static void Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp);
@@ -62,6 +66,8 @@ static int Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
 static int Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp, 
                               int objc, Tcl_Obj *CONST objv[]);
 static HRESULT BuildMoniker(LPCOLESTR name, LPMONIKER *pmk);
+static HRESULT RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
+                            LPOLESTR *pNewName, DWORD cbNewName, DWORD *pdwCookie);
 static Tcl_Obj* Winsend_Win32ErrorObj(HRESULT hrError);
 
 /* -------------------------------------------------------------------------
@@ -116,9 +122,23 @@ Winsend_Init(Tcl_Interp* interp)
     /* Create our registration object. */
     hr = WinSendCom_CreateInstance(interp, &IID_IUnknown, (void**)&pkg->obj);
 
+    /*if (SUCCEEDED(hr))
+        hr = CoMarshalInterThreadInterfaceInStream(&IID_IUnknown, pkg->obj, &pkg->stream);
     if (SUCCEEDED(hr))
     {
-        LPRUNNINGOBJECTTABLE pROT = NULL;
+        DWORD dwThreadID = 0;
+        pkg->handle = (HANDLE)_beginthreadex(NULL, 0,
+                                             RegisterInterface,
+                                             (void*)pkg,
+                                             0,
+                                             &dwThreadID);
+    }
+    */
+
+
+    if (SUCCEEDED(hr))
+    {
+        LPOLESTR szNewName = NULL;
         Tcl_Obj *name = NULL;
 
         if (Tcl_Eval(interp, "file tail $::argv0") == TCL_OK)
@@ -126,46 +146,16 @@ Winsend_Init(Tcl_Interp* interp)
         if (name == NULL)
             name = Tcl_NewUnicodeObj(L"tcl", 3);
         
-        hr = GetRunningObjectTable(0, &pROT);
+        szNewName = (LPOLESTR)malloc(sizeof(OLECHAR) * 64);
+        if (szNewName == NULL)
+            hr = E_OUTOFMEMORY;
         if (SUCCEEDED(hr))
         {
-            int n = 1;
-            LPMONIKER pmk = NULL;
-            OLECHAR oleName[64];
-            oleName[0] = 0;
-
-            do
-            {
-                if (n > 1)
-                    swprintf(oleName, L"%s #%u", Tcl_GetUnicode(name), n);
-                else
-                    wcscpy(oleName, Tcl_GetUnicode(name));
-                n++;
-
-                hr = BuildMoniker(oleName, &pmk);
-
-                if (SUCCEEDED(hr)) {
-                    hr = pROT->lpVtbl->Register(pROT,
-                                                ROTFLAGS_REGISTRATIONKEEPSALIVE,
-                                                pkg->obj,
-                                                pmk,
-                                                &pkg->ROT_cookie);
-                    if (SUCCEEDED(hr)) {
-                        pkg->appname = Tcl_NewUnicodeObj(oleName, -1);
-                        Tcl_IncrRefCount(pkg->appname);
-                    }
-                    pmk->lpVtbl->Release(pmk);
-                }
-
-                /* If the moniker was registered, unregister the duplicate and
-                 * try again.
-                 */
-                if (hr == MK_S_MONIKERALREADYREGISTERED)
-                    pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
-
-            } while (hr == MK_S_MONIKERALREADYREGISTERED);
-
-            pROT->lpVtbl->Release(pROT);
+            hr = RegisterName(Tcl_GetUnicode(name), pkg->obj, FALSE,
+                              &szNewName, 64, &pkg->ROT_cookie);
+            if (SUCCEEDED(hr))
+                pkg->appname = Tcl_NewUnicodeObj(szNewName, -1);
+            free(szNewName);
         }
 
         /* Create our winsend command */
@@ -501,46 +491,44 @@ Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
 
     } else {
 
-        LPRUNNINGOBJECTTABLE pROT = NULL;
-        hr = GetRunningObjectTable(0, &pROT);
-        if (SUCCEEDED(hr)) {
-            LPMONIKER pmk;
-            LPOLESTR szNewName;
+        LPOLESTR szNewName = NULL;
+        DWORD dwCookie = 0;
 
-            szNewName = Tcl_GetUnicode(objv[2]);
+        szNewName = (LPOLESTR)malloc(sizeof(OLECHAR) * 64);
+        if (szNewName == NULL)
+            hr = E_OUTOFMEMORY;
+        if (SUCCEEDED(hr))
+        {
+            hr = RegisterName(Tcl_GetUnicode(objv[2]), pkg->obj, TRUE,
+                              &szNewName, 64, &dwCookie);
+            if (SUCCEEDED(hr))
+            {
+                LPRUNNINGOBJECTTABLE pROT = NULL;
+                hr = GetRunningObjectTable(0, &pROT);
+                if (SUCCEEDED(hr))
+                {
+                    /* revoke the old name */
+                    hr = pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
+                    /* record the new registration details */
+                    pkg->ROT_cookie = dwCookie;
+                    pkg->appname = Tcl_NewUnicodeObj(szNewName, -1);
+                    Tcl_SetObjResult(interp, pkg->appname);
 
-            /* construct a new moniker */
-            hr = BuildMoniker(szNewName, &pmk);
-            if (SUCCEEDED(hr)) {
-                DWORD cookie = 0;
-
-                /* register the new name */
-                hr = pROT->lpVtbl->Register(pROT, ROTFLAGS_REGISTRATIONKEEPSALIVE, pkg->obj, pmk, &cookie);
-                if (SUCCEEDED(hr)) {
-                    if (hr == MK_S_MONIKERALREADYREGISTERED) {
-                        pROT->lpVtbl->Revoke(pROT, cookie);
-                        Tcl_SetObjResult(interp, Winsend_Win32ErrorObj(hr));
-                        r = TCL_ERROR;
-                    } else {
-
-                        /* revoke the old name */
-                        hr = pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
-                        if (SUCCEEDED(hr)) {
-
-                            /* update the package structure */
-                            pkg->ROT_cookie = cookie;
-                            Tcl_SetUnicodeObj(pkg->appname, szNewName, -1);
-                            Tcl_SetObjResult(interp, pkg->appname);
-                        }
-                    }
+                    pROT->lpVtbl->Release(pROT);
                 }
-                pmk->lpVtbl->Release(pmk);
             }
-            pROT->lpVtbl->Release(pROT);
+            free(szNewName);
         }
         if (FAILED(hr))
         {
-            Tcl_SetObjResult(interp, Winsend_Win32ErrorObj(hr));
+            Tcl_Obj *err = NULL;
+
+            if (hr == MK_E_MONIKERALREADYREGISTERED)
+                err = Tcl_NewStringObj("error: this name is already in use", -1);
+            else 
+                err = Winsend_Win32ErrorObj(hr);
+
+            Tcl_SetObjResult(interp, err);
             r = TCL_ERROR;
         }
     }
@@ -658,6 +646,65 @@ BuildMoniker(LPCOLESTR name, LPMONIKER *pmk)
             pmkItem->lpVtbl->Release(pmkItem);
         }
         pmkClass->lpVtbl->Release(pmkClass);
+    }
+    return hr;
+}
+
+/* -------------------------------------------------------------------------
+ * RegisterObject
+ * -------------------------------------------------------------------------
+ * Description:
+ */
+static HRESULT
+RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
+             LPOLESTR *pNewName, DWORD cbNewName, DWORD *pdwCookie)
+{
+    HRESULT hr = S_OK;
+    LPRUNNINGOBJECTTABLE pROT = NULL;
+
+    if (pNewName == NULL || cbNewName < 2)
+        hr = E_INVALIDARG;
+    if (SUCCEEDED(hr))
+        hr = GetRunningObjectTable(0, &pROT);
+    if (SUCCEEDED(hr))
+    {
+        int n = 1;
+        LPMONIKER pmk = NULL;
+
+        memset(*pNewName, 0, sizeof(OLECHAR) * cbNewName);
+
+        do
+        {
+            if (n > 1)
+                _snwprintf(*pNewName, cbNewName, L"%s #%u", szName, n);
+            else
+                wcsncpy(*pNewName, szName, cbNewName);
+            n++;
+
+            hr = BuildMoniker(*pNewName, &pmk);
+
+            if (SUCCEEDED(hr)) {
+                hr = pROT->lpVtbl->Register(pROT,
+                                            ROTFLAGS_REGISTRATIONKEEPSALIVE,
+                                            pUnknown,
+                                            pmk,
+                                            pdwCookie);
+                pmk->lpVtbl->Release(pmk);
+            }
+
+            /* If the moniker was registered, unregister the duplicate and
+             * try again.
+             * If the force flag was set then convert this into an error code.
+             */
+            if (hr == MK_S_MONIKERALREADYREGISTERED) {
+                pROT->lpVtbl->Revoke(pROT, *pdwCookie);
+                *pdwCookie = -1;
+                if (bForce)
+                    hr = MK_E_MONIKERALREADYREGISTERED;
+            }
+        } while (hr == MK_S_MONIKERALREADYREGISTERED);
+
+        pROT->lpVtbl->Release(pROT);
     }
     return hr;
 }
