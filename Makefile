@@ -11,11 +11,11 @@
 #TCLROOT ="c:/Program Files/Tcl"
 TCLROOT =/opt/tcl
 
-VER     =04
+VER     =05
 DBGX    =d
-DBGFLAGS=-D_DEBUG
+DBGFLAGS=-g -D_DEBUG
 
-CC      =gcc -g
+CC      =gcc
 DLLWRAP =dllwrap
 DLLTOOL =dlltool
 RM      =rm -f

@@ -13,6 +13,7 @@ static const char rcsid[] =
 "$Id$";
 
 #include <windows.h>
+#include <process.h>
 #include <ole2.h>
 #include <tchar.h>
 #include <tcl.h>
@@ -49,6 +50,8 @@ typedef struct WinsendPkg_t {
     LPUNKNOWN obj;              /* Interface for the registration object */
     Tcl_Command token;          /* Winsend command token */
     IStream *stream;            /* stream to use for thread marshalling */
+    HANDLE   handle;            /* handle to the asynchronous registration thread */
+    HRESULT  reg_err;
 } WinsendPkg;
 
 static void Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp);
@@ -69,6 +72,7 @@ static HRESULT BuildMoniker(LPCOLESTR name, LPMONIKER *pmk);
 static HRESULT RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
                             LPOLESTR *pNewName, DWORD cbNewName, DWORD *pdwCookie);
 static Tcl_Obj* Winsend_Win32ErrorObj(HRESULT hrError);
+static DWORD WINAPI RegisterNameAsync(void *clientData);
 
 /* -------------------------------------------------------------------------
  * DllMain
@@ -99,6 +103,7 @@ Winsend_Init(Tcl_Interp* interp)
 {
     HRESULT hr = S_OK;
     int r = TCL_OK;
+    Tcl_Obj *name = NULL;
     WinsendPkg *pkg = NULL;
 
 #ifdef USE_TCL_STUBS
@@ -112,6 +117,12 @@ Winsend_Init(Tcl_Interp* interp)
     }
     memset(pkg, 0, sizeof(WinsendPkg));
 
+    /* discover our root name */
+    if (Tcl_Eval(interp, "file tail $::argv0") == TCL_OK)
+        name = Tcl_GetObjResult(interp);
+    if (name == NULL)
+        name = Tcl_NewUnicodeObj(L"tcl", 3);
+
     /* Initialize COM */
     hr = CoInitialize(0);
     if (FAILED(hr)) {
@@ -122,29 +133,26 @@ Winsend_Init(Tcl_Interp* interp)
     /* Create our registration object. */
     hr = WinSendCom_CreateInstance(interp, &IID_IUnknown, (void**)&pkg->obj);
 
-    /*if (SUCCEEDED(hr))
+#ifdef ASYNC_REGISTRATION
+    if (SUCCEEDED(hr))
         hr = CoMarshalInterThreadInterfaceInStream(&IID_IUnknown, pkg->obj, &pkg->stream);
     if (SUCCEEDED(hr))
     {
         DWORD dwThreadID = 0;
+        pkg->appname = name;
+        pkg->reg_err = E_FAIL;
         pkg->handle = (HANDLE)_beginthreadex(NULL, 0,
-                                             RegisterInterface,
+                                             RegisterNameAsync,
                                              (void*)pkg,
                                              0,
                                              &dwThreadID);
     }
-    */
 
+#else /* ! ASYNC_REGISTRATION */
 
     if (SUCCEEDED(hr))
     {
         LPOLESTR szNewName = NULL;
-        Tcl_Obj *name = NULL;
-
-        if (Tcl_Eval(interp, "file tail $::argv0") == TCL_OK)
-            name = Tcl_GetObjResult(interp);
-        if (name == NULL)
-            name = Tcl_NewUnicodeObj(L"tcl", 3);
         
         szNewName = (LPOLESTR)malloc(sizeof(OLECHAR) * 64);
         if (szNewName == NULL)
@@ -153,19 +161,24 @@ Winsend_Init(Tcl_Interp* interp)
         {
             hr = RegisterName(Tcl_GetUnicode(name), pkg->obj, FALSE,
                               &szNewName, 64, &pkg->ROT_cookie);
-            if (SUCCEEDED(hr))
+            if (SUCCEEDED(hr)) {
                 pkg->appname = Tcl_NewUnicodeObj(szNewName, -1);
+                Tcl_IncrRefCount(pkg->appname);
+            }
             free(szNewName);
         }
+    }
 
-        /* Create our winsend command */
-        if (SUCCEEDED(hr)) {
-            pkg->token = Tcl_CreateObjCommand(interp,
-                                              "winsend",
-                                              Winsend_CmdProc,
-                                              (ClientData)pkg,
-                                              (Tcl_CmdDeleteProc*)NULL);
-        }
+#endif /* ! ASYNC_REGISTRATION */
+
+    /* Create our winsend command */
+    if (SUCCEEDED(hr))
+    {
+        pkg->token = Tcl_CreateObjCommand(interp,
+                                          "winsend",
+                                          Winsend_CmdProc,
+                                          (ClientData)pkg,
+                                          (Tcl_CmdDeleteProc*)NULL);
 
         /* Create an exit procedure to handle unregistering when the
          * Tcl interpreter terminates.
@@ -173,8 +186,8 @@ Winsend_Init(Tcl_Interp* interp)
         Tcl_CallWhenDeleted(interp, Winsend_InterpDeleteProc, (ClientData)pkg);
         Tcl_CreateExitHandler(Winsend_PkgDeleteProc, (ClientData)pkg);
         r = Tcl_PkgProvide(interp, WINSEND_PACKAGE_NAME, WINSEND_PACKAGE_VERSION);
-
     }
+
     if (FAILED(hr))
     {
         Tcl_SetObjResult(interp, Winsend_Win32ErrorObj(hr));
@@ -287,11 +300,12 @@ Winsend_PkgDeleteProc(ClientData clientData)
  */
 static int
 Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
-                    int objc, Tcl_Obj *CONST objv[])
+                int objc, Tcl_Obj *CONST objv[])
 {
     enum {WINSEND_INTERPS, WINSEND_SEND, WINSEND_APPNAME, WINSEND_TEST};
     static char* cmds[] = { "interps", "send", "appname", "test", NULL };
     int index = 0, r = TCL_OK;
+    WinsendPkg *pkg = (WinsendPkg*)clientData;
 
     if (objc < 2) {
         Tcl_WrongNumArgs(interp, 1, objv, "command ?args ...?");
@@ -479,27 +493,47 @@ Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
     int r = TCL_OK;
     HRESULT hr = S_OK;
     WinsendPkg* pkg = (WinsendPkg*)clientData;
-    
+    enum {WINSEND_APPNAME_EXACT};
+    static char* cmds[] = { "-exact", NULL };
+   
     if (objc == 2) {
 
         Tcl_SetObjResult(interp, Tcl_DuplicateObj(pkg->appname));
 
-    } else if (objc > 3) {
+    } else if (objc > 4) {
 
-        Tcl_WrongNumArgs(interp, 2, objv, "?appname?");
+        Tcl_WrongNumArgs(interp, 2, objv, "?-exact? ?appname?");
         r = TCL_ERROR;
 
     } else {
 
         LPOLESTR szNewName = NULL;
-        DWORD dwCookie = 0;
+        DWORD    dwCookie = 0;
+        BOOL     bForce = TRUE;
+        Tcl_Obj *objAppname = objv[2];
+        enum {WINSEND_APPNAME_FORCE, WINSEND_APPNAME_INCREMENT};
+        static char *opts[] = {"-force", "-increment", NULL};
 
+        if (objc == 4) {
+            int index = 0;
+            objAppname = objv[3];
+            r = Tcl_GetIndexFromObj(interp, objv[2], opts, "option", 0, &index);
+            if (r == TCL_OK) {
+                switch (index) {
+                case WINSEND_APPNAME_FORCE: bForce = TRUE; break;
+                case WINSEND_APPNAME_INCREMENT: bForce = FALSE; break;
+                }
+            } else {
+                return r;
+            }
+        }
+        
         szNewName = (LPOLESTR)malloc(sizeof(OLECHAR) * 64);
         if (szNewName == NULL)
             hr = E_OUTOFMEMORY;
         if (SUCCEEDED(hr))
         {
-            hr = RegisterName(Tcl_GetUnicode(objv[2]), pkg->obj, TRUE,
+            hr = RegisterName(Tcl_GetUnicode(objAppname), pkg->obj, bForce,
                               &szNewName, 64, &dwCookie);
             if (SUCCEEDED(hr))
             {
@@ -511,7 +545,9 @@ Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
                     hr = pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
                     /* record the new registration details */
                     pkg->ROT_cookie = dwCookie;
+                    Tcl_DecrRefCount(pkg->appname); /* release the old name */
                     pkg->appname = Tcl_NewUnicodeObj(szNewName, -1);
+                    Tcl_IncrRefCount(pkg->appname); /* hang onto the new name */
                     Tcl_SetObjResult(interp, pkg->appname);
 
                     pROT->lpVtbl->Release(pROT);
@@ -543,8 +579,8 @@ static int
 Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
                  int objc, Tcl_Obj *CONST objv[])
 {
-    enum {WINSEND_TEST_ERROR};
-    static char* cmds[] = { "error", NULL };
+    enum {WINSEND_TEST_ERROR, WINSEND_TEST_OBJECT};
+    static char* cmds[] = { "error", "object", NULL };
     int index = 0, r = TCL_OK;
 
     if (objc < 3) {
@@ -564,6 +600,14 @@ Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
                 r = TCL_ERROR;
             }
             break;
+        case WINSEND_TEST_OBJECT:
+            {
+                Tcl_Obj *obj = Tcl_NewLongObj(0xBB66AA55L);
+                Tcl_IncrRefCount(obj);
+                Tcl_SetObjResult(interp, obj);
+                Tcl_DecrRefCount(obj);
+                r = TCL_OK;
+            }
         }
     }
     return r;
@@ -707,6 +751,39 @@ RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
         pROT->lpVtbl->Release(pROT);
     }
     return hr;
+}
+
+static DWORD WINAPI 
+RegisterNameAsync(void *clientData)
+{
+    WinsendPkg *pkg = (WinsendPkg*)clientData;
+    LPOLESTR szNewName = NULL;
+    HRESULT hr = E_OUTOFMEMORY;
+
+    szNewName = (LPOLESTR)malloc(sizeof(OLECHAR) * 64);
+    if (szNewName != NULL)
+    {
+        hr = CoInitialize(0);
+        if (SUCCEEDED(hr))
+        {
+            IUnknown *pUnknown = NULL;
+            hr = CoGetInterfaceAndReleaseStream(pkg->stream, &IID_IUnknown, &pUnknown);
+            if (SUCCEEDED(hr))
+            {
+                pkg->stream = NULL;
+
+                hr = RegisterName(Tcl_GetUnicode(pkg->appname), pUnknown, FALSE,
+                                  &szNewName, 64, &pkg->ROT_cookie);
+                if (SUCCEEDED(hr))
+                    Tcl_SetUnicodeObj(pkg->appname, szNewName, -1);
+
+                pUnknown->lpVtbl->Release(pUnknown);
+            }
+        }
+        free(szNewName);
+    }
+    pkg->reg_err = hr;
+    return (DWORD)hr;
 }
 
 /* -------------------------------------------------------------------------
