@@ -1,0 +1,39 @@
+// RCS: @(#) $Id$
+//
+// Version Resource Script
+//
+
+#include <winver.h>
+
+LANGUAGE 0x9, 0x1	/* LANG_ENGLISH, SUBLANG_DEFAULT */
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    0,6,0,0
+ PRODUCTVERSION 0,6,0,0
+ FILEFLAGSMASK 	0x3fL
+#ifdef DEBUG
+ FILEFLAGS 	VS_FF_DEBUG
+#else
+ FILEFLAGS 	0x0L
+#endif
+ FILEOS 	VOS__WINDOWS32
+ FILETYPE 	VFT_DLL
+ FILESUBTYPE 	0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0" /* LANG_ENGLISH/SUBLANG_ENGLISH_US, Unicode CP */
+        BEGIN
+            VALUE "FileDescription", "Windows COM based send extension\0"
+            VALUE "OriginalFilename", "winsend06.dll\0"
+            VALUE "FileVersion", "0.6.0.0\0"
+            VALUE "LegalCopyright", "Copyright \251 2002 Pat Thoyts <patthoyts@users.sourceforge.net>\0"
+            VALUE "ProductName", "Winsend\0"
+            VALUE "ProductVersion", "0.6.0.0\0"
+        END		    
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
