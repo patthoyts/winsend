@@ -11,7 +11,7 @@ not be blocked by badly behaving windows applications.
 
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
-  0.5                        |     0.5
+  1.0                        |     1.0
   % winsend interps          |     % winsend interps
   tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
                              |     % winsend send tkcon.tcl set x 1
@@ -40,7 +40,7 @@ windows. It will also work from MS Words macro editor etc. You need to
 start up an interpreter and load the winsend package (for instance -
 using tkcon):
 
-Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
+Set interp = GetObject("TclEval\tkcon.tcl")
 interp.Send "puts {Hello from VB Script}"
 WScript.Echo interp.Send("info tcl")
 
@@ -50,7 +50,7 @@ Tcl version printed in your DOS box.
 See
   http://tclsoap.sourceforge.net/winsend.html
 and
-  http://prdownloads.sourceforge.net/tclsoap/winsend-0.5.zip
+  http://prdownloads.sourceforge.net/tclsoap/winsend-1.0.zip
 for the docs (this document) and code respectively.
 
 Pat Thoyts.

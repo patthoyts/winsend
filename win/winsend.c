@@ -25,6 +25,11 @@ static const char rcsid[] =
 #define TCL_STORAGE_CLASS DLLEXPORT
 #endif /* BUILD_winsend */
 
+/* Tcl 8.4 CONST support */
+#ifndef CONST84
+#define CONST84
+#endif
+
 /* Should be defined in WTypes.h but mingw 1.0 is missing them */
 #ifndef _ROTFLAGS_DEFINED
 #define _ROTFLAGS_DEFINED
@@ -35,6 +40,7 @@ static const char rcsid[] =
 #define WINSEND_PACKAGE_VERSION   VERSION
 #define WINSEND_PACKAGE_NAME      "winsend"
 #define WINSEND_CLASS_NAME        "TclEval"
+#define WINSEND_REGISTRATION_BASE L"TclEval"
 
 #define MK_E_MONIKERALREADYREGISTERED \
     MAKE_HRESULT(SEVERITY_ERROR, FACILITY_ITF, 0x02A1)
@@ -72,7 +78,6 @@ static HRESULT BuildMoniker(LPCOLESTR name, LPMONIKER *pmk);
 static HRESULT RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
                             LPOLESTR *pNewName, DWORD cbNewName, DWORD *pdwCookie);
 static Tcl_Obj* Winsend_Win32ErrorObj(HRESULT hrError);
-static DWORD WINAPI RegisterNameAsync(void *clientData);
 
 /* -------------------------------------------------------------------------
  * Winsend_Init
@@ -116,25 +121,6 @@ Winsend_Init(Tcl_Interp* interp)
     /* Create our registration object. */
     hr = WinSendCom_CreateInstance(interp, &IID_IUnknown, (void**)&pkg->obj);
 
-#ifdef ASYNC_REGISTRATION
-    if (SUCCEEDED(hr))
-        hr = CoMarshalInterThreadInterfaceInStream(&IID_IUnknown,
-                                                   pkg->obj,
-                                                   &pkg->stream);
-    if (SUCCEEDED(hr))
-    {
-        DWORD dwThreadID = 0;
-        pkg->appname = name;
-        pkg->reg_err = E_FAIL;
-        pkg->handle = (HANDLE)_beginthreadex(NULL, 0,
-                                             RegisterNameAsync,
-                                             (void*)pkg,
-                                             0,
-                                             &pkg->threadid);
-    }
-
-#else /* ! ASYNC_REGISTRATION */
-
     if (SUCCEEDED(hr))
     {
         LPOLESTR szNewName = NULL;
@@ -153,8 +139,6 @@ Winsend_Init(Tcl_Interp* interp)
             free(szNewName);
         }
     }
-
-#endif /* ! ASYNC_REGISTRATION */
 
     /* Create our winsend command */
     if (SUCCEEDED(hr))
@@ -247,15 +231,6 @@ Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp)
     pkg->obj->lpVtbl->Release(pkg->obj);
     pkg->obj = NULL;
 
-#ifdef ASYNC_REGISTRATION
-    if (pkg->handle != INVALID_HANDLE_VALUE)
-    {
-        CloseHandle(pkg->handle);
-        pkg->handle = INVALID_HANDLE_VALUE;
-    }
-    PostThreadMessage(pkg->threadid, WM_QUIT, 0, 0);
-#endif // ASYNC_REGISTRATION
-
     /* unlock the package data structure. */
     Tcl_Release((ClientData)pkg);
 }
@@ -297,9 +272,8 @@ Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
                 int objc, Tcl_Obj *CONST objv[])
 {
     enum {WINSEND_INTERPS, WINSEND_SEND, WINSEND_APPNAME, WINSEND_TEST};
-    static const char* cmds[] = { "interps", "send", "appname", "test", NULL };
+    static CONST84 char* cmds[] = { "interps", "send", "appname", "test", NULL };
     int index = 0, r = TCL_OK;
-    WinsendPkg *pkg = (WinsendPkg*)clientData;
 
     if (objc < 2) {
         Tcl_WrongNumArgs(interp, 1, objv, "command ?args ...?");
@@ -341,9 +315,9 @@ Winsend_CmdInterps(ClientData clientData, Tcl_Interp *interp,
                    int objc, Tcl_Obj *CONST objv[])
 {
     LPRUNNINGOBJECTTABLE pROT = NULL;
-    LPCOLESTR oleszStub = OLESTR("\\\\.\\TclInterp");
+    LPCOLESTR oleszStub = WINSEND_REGISTRATION_BASE;
     HRESULT hr = S_OK;
-    Tcl_Obj *objList;
+    Tcl_Obj *objList = NULL;
     int r = TCL_OK;
     
     if (objc != 2) {
@@ -487,8 +461,6 @@ Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
     int r = TCL_OK;
     HRESULT hr = S_OK;
     WinsendPkg* pkg = (WinsendPkg*)clientData;
-    enum {WINSEND_APPNAME_EXACT};
-    static char* cmds[] = { "-exact", NULL };
    
     if (objc == 2) {
 
@@ -506,7 +478,7 @@ Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
         BOOL     bForce = TRUE;
         Tcl_Obj *objAppname = objv[2];
         enum {WINSEND_APPNAME_FORCE, WINSEND_APPNAME_INCREMENT};
-        static const char *opts[] = {"-force", "-increment", NULL};
+        static CONST84 char *opts[] = {"-force", "-increment", NULL};
 
         if (objc == 4) {
             int index = 0;
@@ -574,7 +546,7 @@ Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
                  int objc, Tcl_Obj *CONST objv[])
 {
     enum {WINSEND_TEST_ERROR, WINSEND_TEST_OBJECT};
-    static CONST char * cmds[] = { "error", "object", NULL };
+    static CONST84 char * cmds[] = { "error", "object", NULL };
     int index = 0, r = TCL_OK;
 
     if (objc < 3) {
@@ -596,7 +568,7 @@ Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
             break;
         case WINSEND_TEST_OBJECT:
             {
-                Tcl_Obj *obj = Tcl_NewLongObj(0xBB66AA55L);
+                Tcl_Obj *obj = Tcl_NewLongObj((long)0xBB66AA55L);
                 Tcl_IncrRefCount(obj);
                 Tcl_SetObjResult(interp, obj);
                 Tcl_DecrRefCount(obj);
@@ -684,22 +656,16 @@ Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp,
  *  monikers have the same prefix.
  */
 static HRESULT
-BuildMoniker(LPCOLESTR name, LPMONIKER *pmk)
+BuildMoniker(LPCOLESTR name, LPMONIKER *ppmk)
 {
-    LPCOLESTR oleszStub = OLESTR("\\\\.\\TclInterp");
     LPMONIKER pmkClass = NULL;
-    HRESULT hr = CreateFileMoniker(oleszStub, &pmkClass);
+    HRESULT hr = CreateFileMoniker(WINSEND_REGISTRATION_BASE, &pmkClass);
     if (SUCCEEDED(hr)) {
         LPMONIKER pmkItem = NULL;
+        
         hr = CreateFileMoniker(name, &pmkItem);
         if (SUCCEEDED(hr)) {
-            LPMONIKER pmkJoint = NULL;
-            hr = pmkClass->lpVtbl->ComposeWith(pmkClass, pmkItem, FALSE, &pmkJoint);
-            if (SUCCEEDED(hr)) {
-                *pmk = pmkJoint;
-                (*pmk)->lpVtbl->AddRef(*pmk);
-                pmkJoint->lpVtbl->Release(pmkJoint);
-            }
+            hr = pmkClass->lpVtbl->ComposeWith(pmkClass, pmkItem, FALSE, ppmk);
             pmkItem->lpVtbl->Release(pmkItem);
         }
         pmkClass->lpVtbl->Release(pmkClass);
@@ -755,7 +721,7 @@ RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
              */
             if (hr == MK_S_MONIKERALREADYREGISTERED) {
                 pROT->lpVtbl->Revoke(pROT, *pdwCookie);
-                *pdwCookie = -1;
+                *pdwCookie = (DWORD)-1;
                 if (bForce)
                     hr = MK_E_MONIKERALREADYREGISTERED;
             }
@@ -764,53 +730,6 @@ RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
         pROT->lpVtbl->Release(pROT);
     }
     return hr;
-}
-
-static DWORD WINAPI 
-RegisterNameAsync(void *clientData)
-{
-    WinsendPkg *pkg = (WinsendPkg*)clientData;
-    LPOLESTR szNewName = NULL;
-    HRESULT hr = E_OUTOFMEMORY;
-
-    szNewName = (LPOLESTR)malloc(sizeof(OLECHAR) * 64);
-    if (szNewName != NULL)
-    {
-        hr = CoInitialize(0);
-        if (SUCCEEDED(hr))
-        {
-            IUnknown *pUnknown = NULL;
-            hr = CoGetInterfaceAndReleaseStream(pkg->stream,
-                                                &IID_IUnknown,
-                                                (void**)&pUnknown);
-            if (SUCCEEDED(hr))
-            {
-                pkg->stream = NULL;
-
-                hr = RegisterName(L"TEST"/*Tcl_GetUnicode(pkg->appname)*/,
-                                  pkg->obj/*pUnknown*/, FALSE,
-                                  &szNewName, 64, &(pkg->ROT_cookie));
-                if (SUCCEEDED(hr))
-                    Tcl_SetUnicodeObj(pkg->appname, szNewName, -1);
-
-                pUnknown->lpVtbl->Release(pUnknown);
-            }
-        }
-        free(szNewName);
-    }
-    pkg->reg_err = hr;
-
-    /* pump messages for this apartment */
-    {
-        MSG msg;
-        LTRACE(_T("Start pumping messages in the worker apartment\n"));
-        while (GetMessage(&msg, 0, 0, 0))
-            DispatchMessage(&msg);
-        LTRACE(_T("Worker apartment thread shutting down\n"));
-    }
-
-    CoUninitialize();
-    return (DWORD)hr;
 }
 
 /* -------------------------------------------------------------------------
@@ -831,7 +750,7 @@ Winsend_Win32ErrorObj(HRESULT hrError)
 
     if (lpBuffer == NULL) {
 		lpBuffer = sBuffer;
-        wsprintf(sBuffer, _T("Error Code: %08lX"), hrError);
+        _stprintf(sBuffer, _T("Error Code: %08lX"), hrError);
     }
 
     if ((p = _tcsrchr(lpBuffer, _T('\r'))) != NULL)

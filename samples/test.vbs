@@ -1,3 +1,3 @@
 Dim o
-Set o = GetObject("\\.\TclInterp\tkchat")
+Set o = GetObject("TclEval\tkchat")
 WScript.Echo o.Send("puts {Hello, from VB} ; info tcl")

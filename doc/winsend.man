@@ -1,10 +1,10 @@
-[manpage_begin winsend n 0.6]
+[manpage_begin winsend n 1.0]
 [copyright {2002 Pat Thoyts <patthoyts@users.sourceforge.net>}]
 [comment {$Id$}]
 [moddesc   {winsend}]
 [titledesc {send implementation for windows platform}]
 [require Tcl 8.3]
-[require winsend [opt 0.6]]
+[require winsend [opt 1.0]]
 [description]
 [para]
 
@@ -57,7 +57,7 @@ others. For instance the following VB script can be run using the
 Windows Scripting Host cscript application using 
 [cmd "cscript test.vbs"]
 [example {
- Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
+ Set interp = GetObject("TclEval\tkcon.tcl")
  interp.Send "puts {Hello from VB Script}"
  WScript.Echo interp.Send("info tcl")}]
 
@@ -103,7 +103,7 @@ command evaluation.
 [para]
 [example {
 % package require winsend
-0.6
+1.0
 % winsend appname MyApp
 MyApp
 % winsend send MyApp info tcl
@@ -116,7 +116,7 @@ An example session between two interpreters
 [example {
 An example (from tkcon):         from a concurrent tclsh:
   % package require winsend  |     % package require winsend
-  0.6                        |     0.6
+  1.0                        |     1.0
   % winsend interps          |     % winsend interps
   tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
                              |     % winsend send tkcon.tcl set x 1
@@ -137,10 +137,10 @@ An example (from tkcon):         from a concurrent tclsh:
 [section {DOWNLOAD and INSTALLATION}]
 
 The latest version is available at
-[uri {http://prdownloads.sourceforge.net/tclsoap/winsend-0.6.zip}]
+[uri {http://prdownloads.sourceforge.net/tclsoap/winsend-1.0.zip}]
 This includes the source and the DLLs. To install, copy the DLLs and
 the [file pkgIndex.tcl] file to a subdirectory of your [var auto_path]
-variable. For instance, to [file {c:/Program Files/Tcl/lib/winsend06/}]
+variable. For instance, to [file {c:/Program Files/Tcl/lib/winsend10/}]
 
 [para]
 

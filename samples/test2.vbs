@@ -1,4 +1,4 @@
-' test2.vbs - Copyright (C) 2002 Pat Thoyts <Pat.Thoyts@bigfoot.com>
+' test2.vbs - Copyright (C) 2002-2004 Pat Thoyts <patthoyts@users.sourceforge.net>
 '
 ' Demo accessing Tcl using the winsend package from the Visual Basic
 ' Scripting engine via the Windown Scripting Host (WSH).
@@ -9,7 +9,7 @@
 ' $Id$
 
 Dim o
-Set o = GetObject("\\.\TclInterp\wish")
+Set o = GetObject("TclEval\wish")
 
 cmd =                   "package require Tk"
 cmd = cmd & vbNewline & "toplevel .t"

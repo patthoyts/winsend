@@ -17,6 +17,17 @@ if {[lsearch [namespace children] ::tcltest] == -1} {
 set ::tcltest::testSingleFile false
 set ::tcltest::testsDirectory [file dir [info script]]
 
+if {[info command ::tcltest::normalizePath] == {}} {
+    proc ::tcltest::normalizePath {pathVar} {
+        upvar $pathVar path
+        set oldpwd [pwd]
+        catch {cd $path}
+        set path [pwd]
+        cd $oldpwd
+        return $path
+    }
+}
+
 # We need to ensure that the testsDirectory is absolute
 ::tcltest::normalizePath ::tcltest::testsDirectory
 
