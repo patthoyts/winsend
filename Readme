@@ -47,11 +47,10 @@ WScript.Echo interp.Send("info tcl")
 You should see the message printed in your tkcon window and see your
 Tcl version printed in your DOS box.
 
-The code needs tidying up a bit before I publish the source but this
-shouldn't take long. In the meantime see
+See
   http://tclsoap.sourceforge.net/winsend.html
 and
-  http://tclsoap.sourceforge.net/winsend03.zip
+  http://tclsoap.sourceforge.net/winsend.zip
 for the docs (this document) and code respectively.
 
 Pat Thoyts.

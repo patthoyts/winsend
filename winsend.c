@@ -19,6 +19,7 @@ static const char rcsid[] =
 
 #include <initguid.h>
 #include "WinSendCom.h"
+#include "debug.h"
 
 #ifndef DECLSPEC_EXPORT
 #define DECLSPEC_EXPORT __declspec(dllexport)
@@ -26,23 +27,36 @@ static const char rcsid[] =
 
 /* Should be defined in WTypes.h but mingw 1.0 is missing them */
 #ifndef _ROTFLAGS_DEFINED
+#define _ROTFLAGS_DEFINED
 #define ROTFLAGS_REGISTRATIONKEEPSALIVE   0x01
 #define ROTFLAGS_ALLOWANYCLIENT           0x02
 #endif /* ! _ROTFLAGS_DEFINED */
 
-#define WINSEND_PACKAGE_VERSION   "0.3"
+#define WINSEND_PACKAGE_VERSION   "0.4"
 #define WINSEND_PACKAGE_NAME      "winsend"
 #define WINSEND_CLASS_NAME        "TclEval"
 
-DWORD g_dwROTCookie;
+/* Package information structure.
+ * This is used to keep interpreter specific details for use when releasing
+ * the package resources upon interpreter deletion or package removal.
+ */
+typedef struct WinsendPkg_t {
+    Tcl_Obj *appname;           /* the registered application name */
+    DWORD ROT_cookie;           /* ROT cookie returned on registration */
+    LPUNKNOWN obj;              /* Interface for the registration object */
+    Tcl_Command token;          /* Winsend command token */
+} WinsendPkg;
 
-static void Winsend_PkgDeleteProc _ANSI_ARGS_((ClientData clientData));
+static void Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp);
+static void Winsend_PkgDeleteProc (ClientData clientData);
 static int Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
                            int objc, Tcl_Obj *CONST objv[]);
 static int Winsend_CmdInterps(ClientData clientData, Tcl_Interp *interp,
                               int objc, Tcl_Obj *CONST objv[]);
 static int Winsend_CmdSend(ClientData clientData, Tcl_Interp *interp,
                            int objc, Tcl_Obj *CONST objv[]);
+static int Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
+                              int objc, Tcl_Obj *CONST objv[]);
 static int Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
                            int objc, Tcl_Obj *CONST objv[]);
 static int Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp, 
@@ -50,9 +64,10 @@ static int Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp,
 static HRESULT BuildMoniker(LPCOLESTR name, LPMONIKER *pmk);
 static Tcl_Obj* Winsend_Win32ErrorObj(HRESULT hrError);
 
-// -------------------------------------------------------------------------
-// DllMain
-// -------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
+ * DllMain
+ * -------------------------------------------------------------------------
+ */
 
 EXTERN_C BOOL APIENTRY
 DllMain(HANDLE hModule, DWORD dwReason, LPVOID lpReserved)
@@ -68,30 +83,38 @@ DllMain(HANDLE hModule, DWORD dwReason, LPVOID lpReserved)
     return TRUE;
 }
 
-// -------------------------------------------------------------------------
-// Winsend_Init
-// -------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
+ * Winsend_Init
+ * -------------------------------------------------------------------------
+ */
 
 EXTERN_C int DECLSPEC_EXPORT
 Winsend_Init(Tcl_Interp* interp)
 {
     HRESULT hr = S_OK;
     int r = TCL_OK;
-    IUnknown *pUnk = NULL;
+    WinsendPkg *pkg = NULL;
 
 #ifdef USE_TCL_STUBS
     Tcl_InitStubs(interp, "8.3", 0);
 #endif
 
-    // Initialize COM
+    pkg = (WinsendPkg*)Tcl_Alloc(sizeof(WinsendPkg));
+    if (pkg == NULL) {
+        Tcl_SetResult(interp, "out of memory", TCL_STATIC);
+        return TCL_ERROR;
+    }
+    memset(pkg, 0, sizeof(WinsendPkg));
+
+    /* Initialize COM */
     hr = CoInitialize(0);
     if (FAILED(hr)) {
         Tcl_SetResult(interp, "failed to initialize the " WINSEND_PACKAGE_NAME " package", TCL_STATIC);
         return TCL_ERROR;
     }
 
-    // Create our registration object.
-    hr = WinSendCom_CreateInstance(interp, &IID_IUnknown, (void**)&pUnk);
+    /* Create our registration object. */
+    hr = WinSendCom_CreateInstance(interp, &IID_IUnknown, (void**)&pkg->obj);
 
     if (SUCCEEDED(hr))
     {
@@ -123,9 +146,14 @@ Winsend_Init(Tcl_Interp* interp)
 
                 if (SUCCEEDED(hr)) {
                     hr = pROT->lpVtbl->Register(pROT,
-                                                ROTFLAGS_REGISTRATIONKEEPSALIVE
-                                                | ROTFLAGS_ALLOWANYCLIENT,
-                                                pUnk, pmk, &g_dwROTCookie);
+                                                ROTFLAGS_REGISTRATIONKEEPSALIVE,
+                                                pkg->obj,
+                                                pmk,
+                                                &pkg->ROT_cookie);
+                    if (SUCCEEDED(hr)) {
+                        pkg->appname = Tcl_NewUnicodeObj(oleName, -1);
+                        Tcl_IncrRefCount(pkg->appname);
+                    }
                     pmk->lpVtbl->Release(pmk);
                 }
 
@@ -133,32 +161,33 @@ Winsend_Init(Tcl_Interp* interp)
                  * try again.
                  */
                 if (hr == MK_S_MONIKERALREADYREGISTERED)
-                    pROT->lpVtbl->Revoke(pROT, g_dwROTCookie);
+                    pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
 
             } while (hr == MK_S_MONIKERALREADYREGISTERED);
 
             pROT->lpVtbl->Release(pROT);
         }
 
-        pUnk->lpVtbl->Release(pUnk);
-
-        // Create our winsend command
+        /* Create our winsend command */
         if (SUCCEEDED(hr)) {
-            Tcl_CreateObjCommand(interp, "winsend", Winsend_CmdProc, (ClientData)0, (Tcl_CmdDeleteProc*)0);
+            pkg->token = Tcl_CreateObjCommand(interp,
+                                              "winsend",
+                                              Winsend_CmdProc,
+                                              (ClientData)pkg,
+                                              (Tcl_CmdDeleteProc*)NULL);
         }
 
         /* Create an exit procedure to handle unregistering when the
          * Tcl interpreter terminates.
          */
-        Tcl_CreateExitHandler(Winsend_PkgDeleteProc, NULL);
+        Tcl_CallWhenDeleted(interp, Winsend_InterpDeleteProc, (ClientData)pkg);
+        Tcl_CreateExitHandler(Winsend_PkgDeleteProc, (ClientData)pkg);
         r = Tcl_PkgProvide(interp, WINSEND_PACKAGE_NAME, WINSEND_PACKAGE_VERSION);
 
     }
     if (FAILED(hr))
     {
-        // TODO: better error handling - rip code from w32_exception.h
-        Tcl_Obj *err = Winsend_Win32ErrorObj(hr);
-        Tcl_SetObjResult(interp, err);
+        Tcl_SetObjResult(interp, Winsend_Win32ErrorObj(hr));
         r = TCL_ERROR;
     } else {
         Tcl_SetResult(interp, "", TCL_STATIC);
@@ -167,9 +196,9 @@ Winsend_Init(Tcl_Interp* interp)
     return r;
 }
 
-// -------------------------------------------------------------------------
-// Winsend_SafeInit
-// -------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
+ * Winsend_SafeInit
+ * ------------------------------------------------------------------------- */
 
 EXTERN_C int DECLSPEC_EXPORT
 Winsend_SafeInit(Tcl_Interp* interp)
@@ -178,33 +207,100 @@ Winsend_SafeInit(Tcl_Interp* interp)
     return TCL_ERROR;
 }
 
-// -------------------------------------------------------------------------
-// WinsendExitProc
-// -------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
+ * Winsend_InterpDeleteProc
+ * -------------------------------------------------------------------------
+ * Description:
+ *  Called when the interpreter is deleted, this procedure clean up the COM
+ *  registration for us. We need to revoke our registered object, and release
+ *  our own object reference. The WinSendCom object should delete itself now.
+ */
+
+static void 
+Winsend_InterpDeleteProc (ClientData clientData, Tcl_Interp *interp)
+{
+    WinsendPkg *pkg = (WinsendPkg*)clientData;
+    LPRUNNINGOBJECTTABLE pROT = NULL;
+    HRESULT hr = S_OK;
+
+    LTRACE(_T("Winsend_InterpDeleteProc( {ROT_cookie: 0x%08X, obj: 0x%08X})\n"),
+           pkg->ROT_cookie, pkg->obj);
+
+    /* Lock the package structure in memory */
+    Tcl_Preserve((ClientData)pkg);
+
+    if (pkg->ROT_cookie != 0) {
+        hr = GetRunningObjectTable(0, &pROT);
+        if (SUCCEEDED(hr))
+        {
+            hr = pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
+            pROT->lpVtbl->Release(pROT);
+            pkg->ROT_cookie = 0;
+        }
+        _ASSERTE(SUCCEEDED(hr));
+    }
+
+    /* Remove the winsend command and release the interp pointer */
+    /* I get assertions from this from within tcl 8.3 - it's not 
+     * really needed anyway
+     */
+    /* if (interp != NULL) {
+        Tcl_DeleteCommandFromToken(interp, pkg->token);
+        pkg->token = 0;
+    }*/
+
+    /* release the appname object */
+    if (pkg->appname != NULL) {
+        Tcl_DecrRefCount(pkg->appname);
+        pkg->appname = NULL;
+    }
+
+    /* Release the registration object */
+    pkg->obj->lpVtbl->Release(pkg->obj);
+    pkg->obj = NULL;
+
+    /* unlock the package data structure. */
+    Tcl_Release((ClientData)pkg);
+}
+
+/* -------------------------------------------------------------------------
+ * Winsend_PkgDeleteProc
+ * -------------------------------------------------------------------------
+ * Description:
+ *  Called when the package is removed, we clean up any outstanding memory
+ *  and release any handles.
+ */
 
 static void
 Winsend_PkgDeleteProc(ClientData clientData)
 {
-    LPRUNNINGOBJECTTABLE pROT = NULL;
-    HRESULT hr = GetRunningObjectTable(0, &pROT);
-    if (SUCCEEDED(hr))
-    {
-        hr = pROT->lpVtbl->Revoke(pROT, g_dwROTCookie);
-        pROT->lpVtbl->Release(pROT);
+    WinsendPkg *pkg = (WinsendPkg*)clientData;
+    LTRACE(_T("Winsend_PkgDeleteProc( {ROT_cookie: 0x%08X, obj: 0x%08X})\n"),
+           pkg->ROT_cookie, pkg->obj);
+
+    if (pkg->obj != NULL) {
+        Winsend_InterpDeleteProc(clientData, NULL);
     }
-    //ASSERT
+
+    _ASSERTE(pkg->obj == NULL);
+    Tcl_Free((char*)pkg);
+
+    CoUninitialize();
 }
 
-// -------------------------------------------------------------------------
-// Winsend_CmdProc
-// -------------------------------------------------------------------------
-
+/* -------------------------------------------------------------------------
+ * Winsend_CmdProc
+ * -------------------------------------------------------------------------
+ * Description:
+ *  The Tcl winsend proc is first processed here and then passed on depending
+ *  upong the command argument.
+ */
 static int
 Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
                     int objc, Tcl_Obj *CONST objv[])
 {
-    enum {WINSEND_INTERPS, WINSEND_SEND, WINSEND_TEST};
-    static char* cmds[] = { "interps", "send", "test", NULL };
+    enum {WINSEND_INTERPS, WINSEND_SEND, WINSEND_APPNAME, WINSEND_TEST};
+    static char* cmds[] = { "interps", "send", "appname", "test", NULL };
     int index = 0, r = TCL_OK;
 
     if (objc < 2) {
@@ -223,6 +319,9 @@ Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
         case WINSEND_SEND:
             r = Winsend_CmdSend(clientData, interp, objc, objv);
             break;
+        case WINSEND_APPNAME:
+            r = Winsend_CmdAppname(clientData, interp, objc, objv);
+            break;
         case WINSEND_TEST:
             r = Winsend_CmdTest(clientData, interp, objc, objv);
             break;
@@ -231,10 +330,14 @@ Winsend_CmdProc(ClientData clientData, Tcl_Interp *interp,
     return r;
 }
 
-// -------------------------------------------------------------------------
-// Winsend_CmdInterps
-// -------------------------------------------------------------------------
-
+/* -------------------------------------------------------------------------
+ * Winsend_CmdInterps
+ * -------------------------------------------------------------------------
+ * Description:
+ *  Iterate over the running object table and identify all the Tcl registered
+ *  objects. We build a list using the tail part of the file moniker and return
+ *  this as the list of registered interpreters.
+ */
 static int 
 Winsend_CmdInterps(ClientData clientData, Tcl_Interp *interp,
                    int objc, Tcl_Obj *CONST objv[])
@@ -274,8 +377,9 @@ Winsend_CmdInterps(ClientData clientData, Tcl_Interp *interp,
 
                             if (wcsncmp(olestr, oleszStub, wcslen(oleszStub)) == 0)
                             {
-                                LPOLESTR p = olestr + wcslen(oleszStub) + 1;
-                                r = Tcl_ListObjAppendElement(interp, objList, Tcl_NewUnicodeObj(p, -1));
+                                LPOLESTR p = olestr + wcslen(oleszStub);
+                                if (*p)
+                                    r = Tcl_ListObjAppendElement(interp, objList, Tcl_NewUnicodeObj(p + 1, -1));
                             }
 
                             hr = CoGetMalloc(1, &pMalloc);
@@ -310,10 +414,10 @@ Winsend_CmdInterps(ClientData clientData, Tcl_Interp *interp,
     return r;
 }
 
-// -------------------------------------------------------------------------
-// Winsend_CmdSend
-// -------------------------------------------------------------------------
-
+/* -------------------------------------------------------------------------
+ * Winsend_CmdSend
+ * -------------------------------------------------------------------------
+ */
 static int
 Winsend_CmdSend(ClientData clientData, Tcl_Interp *interp,
                    int objc, Tcl_Obj *CONST objv[])
@@ -345,7 +449,6 @@ Winsend_CmdSend(ClientData clientData, Tcl_Interp *interp,
                     IDispatch* pdispInterp = NULL;
                     hr = pROT->lpVtbl->IsRunning(pROT, pmk);
                     hr = pmk->lpVtbl->BindToObject(pmk, pBindCtx, NULL, &IID_IUnknown, (void**)&punkInterp);
-                    //hr = pROT->lpVtbl->GetObject(pROT, pmk, &punkInterp);
                     if (SUCCEEDED(hr))
                         hr = punkInterp->lpVtbl->QueryInterface(punkInterp, &IID_IDispatch, (void**)&pdispInterp);
                     if (SUCCEEDED(hr))
@@ -367,6 +470,80 @@ Winsend_CmdSend(ClientData clientData, Tcl_Interp *interp,
         }
     }
 
+    return r;
+}
+
+/* -------------------------------------------------------------------------
+ * Winsend_CmdAppname
+ * -------------------------------------------------------------------------
+ * Description:
+ *  If called with no additional parameters returns the registered application
+ *  name. If a new name is given then we attempt to register the new app name
+ *  If the name is already registered then we cancel the new registration and
+ *  continue using the old appname.
+ */
+static int
+Winsend_CmdAppname(ClientData clientData, Tcl_Interp *interp,
+                   int objc, Tcl_Obj *CONST objv[])
+{
+    int r = TCL_OK;
+    HRESULT hr = S_OK;
+    WinsendPkg* pkg = (WinsendPkg*)clientData;
+    
+    if (objc == 2) {
+
+        Tcl_SetObjResult(interp, Tcl_DuplicateObj(pkg->appname));
+
+    } else if (objc > 3) {
+
+        Tcl_WrongNumArgs(interp, 2, objv, "?appname?");
+        r = TCL_ERROR;
+
+    } else {
+
+        LPRUNNINGOBJECTTABLE pROT = NULL;
+        hr = GetRunningObjectTable(0, &pROT);
+        if (SUCCEEDED(hr)) {
+            LPMONIKER pmk;
+            LPOLESTR szNewName;
+
+            szNewName = Tcl_GetUnicode(objv[2]);
+
+            /* construct a new moniker */
+            hr = BuildMoniker(szNewName, &pmk);
+            if (SUCCEEDED(hr)) {
+                DWORD cookie = 0;
+
+                /* register the new name */
+                hr = pROT->lpVtbl->Register(pROT, ROTFLAGS_REGISTRATIONKEEPSALIVE, pkg->obj, pmk, &cookie);
+                if (SUCCEEDED(hr)) {
+                    if (hr == MK_S_MONIKERALREADYREGISTERED) {
+                        pROT->lpVtbl->Revoke(pROT, cookie);
+                        Tcl_SetObjResult(interp, Winsend_Win32ErrorObj(hr));
+                        r = TCL_ERROR;
+                    } else {
+
+                        /* revoke the old name */
+                        hr = pROT->lpVtbl->Revoke(pROT, pkg->ROT_cookie);
+                        if (SUCCEEDED(hr)) {
+
+                            /* update the package structure */
+                            pkg->ROT_cookie = cookie;
+                            Tcl_SetUnicodeObj(pkg->appname, szNewName, -1);
+                            Tcl_SetObjResult(interp, pkg->appname);
+                        }
+                    }
+                }
+                pmk->lpVtbl->Release(pmk);
+            }
+            pROT->lpVtbl->Release(pROT);
+        }
+        if (FAILED(hr))
+        {
+            Tcl_SetObjResult(interp, Winsend_Win32ErrorObj(hr));
+            r = TCL_ERROR;
+        }
+    }
     return r;
 }
 
@@ -404,15 +581,19 @@ Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
     return r;
 }
 
-// -------------------------------------------------------------------------
-// Helpers.
-// -------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
+ * Helpers.
+ * -------------------------------------------------------------------------
+ */
 
-// -------------------------------------------------------------------------
-// Winsend_ObjSendCmd
-// -------------------------------------------------------------------------
-// Description:
-//   
+/* -------------------------------------------------------------------------
+ * Winsend_ObjSendCmd
+ * -------------------------------------------------------------------------
+ * Description:
+ *   Perform an interface call to the server object. We convert the Tcl arguments
+ *   into a BSTR using 'concat'. The result should be a BSTR that we can set as the
+ *   interp's result string.
+ */   
 static int
 Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp, 
                    int objc, Tcl_Obj *CONST objv[])
@@ -450,7 +631,13 @@ Winsend_ObjSendCmd(LPDISPATCH pdispInterp, Tcl_Interp *interp,
     return (SUCCEEDED(hr) ? TCL_OK : TCL_ERROR);
 }
 
-// Construct a Tcl interpreter moniker from an interp name.
+/* -------------------------------------------------------------------------
+ * BuildMoniker
+ * -------------------------------------------------------------------------
+ * Description:
+ *  Construct a moniker from the given name. This ensures that all our
+ *  monikers have the same prefix.
+ */
 static HRESULT
 BuildMoniker(LPCOLESTR name, LPMONIKER *pmk)
 {
@@ -475,6 +662,12 @@ BuildMoniker(LPCOLESTR name, LPMONIKER *pmk)
     return hr;
 }
 
+/* -------------------------------------------------------------------------
+ * Winsend_Win32ErrorObj
+ * -------------------------------------------------------------------------
+ * Description:
+ *  Convert COM or Win32 API errors into Tcl strings.
+ */
 static Tcl_Obj*
 Winsend_Win32ErrorObj(HRESULT hrError)
 {

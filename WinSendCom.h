@@ -18,7 +18,7 @@ typedef struct WinSendCom_t {
 } WinSendCom;
 
 /*
- * WinSendCom public methods
+ * WinSendCom public functions
  */
 HRESULT WinSendCom_CreateInstance(Tcl_Interp *interp, REFIID riid, void **ppv);
 void WinSendCom_Destroy(LPDISPATCH pdisp);

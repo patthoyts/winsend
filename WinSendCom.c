@@ -13,9 +13,10 @@ static const char rcsid[] =
 
 #include "WinSendCom.h"
 
-/* ---------------------------------------------------------------------- */
-/* Non-public prototypes.
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+ * Non-public prototypes.
+ * ----------------------------------------------------------------------
+ */
 
 static STDMETHODIMP WinSendCom_QueryInterface(IDispatch *This,
                                               REFIID riid, void **ppvObject);
@@ -37,9 +38,10 @@ static STDMETHODIMP WinSendCom_Invoke(IDispatch *This, DISPID dispidMember,
                                       UINT *puArgErr);
 static HRESULT Send(WinSendCom* obj, VARIANT vCmd, VARIANT* pvResult);
 
-/* ---------------------------------------------------------------------- */
-/* COM Class Helpers
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+ * COM Class Helpers
+ * ----------------------------------------------------------------------
+ */
 
 /* Description:
  *   Create and initialises a new instance of the WinSend COM class and

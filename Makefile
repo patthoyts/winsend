@@ -8,7 +8,10 @@
 #
 # @(#)$Id$
 
-VER     =03
+#TCLROOT ="c:/Program Files/Tcl"
+TCLROOT =/opt/tcl
+
+VER     =04
 DBGX    =d
 DBGFLAGS=-D_DEBUG
 
@@ -16,8 +19,8 @@ CC      =gcc -g
 DLLWRAP =dllwrap
 DLLTOOL =dlltool
 RM      =rm -f
-CFLAGS  =-Wall -I/opt/tcl/include -DUSE_TCL_STUBS $(DBGFLAGS)
-LDFLAGS =-L/opt/tcl/lib
+CFLAGS  =-Wall -I$(TCLROOT)/include -DUSE_TCL_STUBS $(DBGFLAGS)
+LDFLAGS =-L$(TCLROOT)/lib
 LIBS    =-ltclstub83${DBGX} -lole32 -loleaut32 -ladvapi32 -luuid
 
 DLL     =winsend${VER}${DBGX}.dll
@@ -25,7 +28,7 @@ DEFFILE =winsend.def
 
 WRAPFLAGS =--driver-name $(CC) --def $(DEFFILE)
 
-CSRCS   =winsend.c WinSendCom.c
+CSRCS   =winsend.c WinSendCom.c debug.c
 OBJS    =$(CSRCS:.c=.o)
 
 $(DLL): $(OBJS)
@@ -37,7 +40,9 @@ clean:
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+winsend.o: WinSendCom.h debug.h
 WinSendCom.o: WinSendCom.c WinSendCom.h
+debug.o: debug.h
 
 .PHONY: clean
 

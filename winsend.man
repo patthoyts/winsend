@@ -1,0 +1,56 @@
+[manpage_begin winsend n 0.4]
+[moddesc   {winsend}]
+[titledesc {Windows send Command}]
+[require Tcl 8.3]
+[require winsend [opt 0.4]]
+[description]
+[para]
+
+The [cmd winsend] package is an attempt to provide the complete
+functionality of the Tk [cmd send] command using the Microsoft Windows
+platform. The two key points are inter-process communications between
+one interpreter and another, and automatic registration of
+interpreters with a central source. With the Tk send command this is
+done via the X Windows server. The [cmd winfo interps] command returns
+a list of registered interpreters and the [cmd send] command allows
+you to execute Tcl commands in the named interpreter.
+
+[section COMMANDS]
+
+[list_begin definitions]
+
+[call [cmd winsend] [arg command] [opt [arg "arguments ..."]]]
+
+[list_begin definitions]
+[lst_item "[cmd interps]"]
+   Get the list of registered interpreter names for use with send.
+[lst_item "[cmd appname] [opt [arg name]]"]
+   When called with no arguments this returns the registered name of
+this interpreter. If a single argument is given, this is used to
+re-register the application using the new name. If the registration
+fails for some reason, such as the name is already in use, then an
+error is returned and the old appname remains in use.
+[lst_item "[cmd send]"]
+   send
+[list_end]
+
+[list_end]
+
+[section EXAMPLES]
+
+[para]
+[example {
+% package require winsend
+0.4
+% winsend appname MyApp
+MyApp
+% winsend send MyApp info tcl
+8.3
+}]
+
+[see_also send(n)]
+[section AUTHORS]
+Pat Thoyts
+
+[keywords send appname]
+[manpage_end]
