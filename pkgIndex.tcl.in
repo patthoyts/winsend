@@ -1,0 +1,8 @@
+# Package index file for Winsend
+
+if {[info exists ::tcl_platform(debug)] && $::tcl_platform(debug)} {
+   package ifneeded @PACKAGE@ @VERSION@ [list load [file join $dir @PKG_DEBUG_LIB@]]
+} else {
+   package ifneeded @PACKAGE@ @VERSION@ [list load [file join $dir @PKG_RELEASE_LIB@]]
+}
+   

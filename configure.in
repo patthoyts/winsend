@@ -36,7 +36,7 @@ AC_SUBST(CONFIGDIR)
 PACKAGE=winsend
 
 MAJOR_VERSION=0
-MINOR_VERSION=5
+MINOR_VERSION=6
 PATCHLEVEL=
 
 VERSION=${MAJOR_VERSION}.${MINOR_VERSION}${PATCHLEVEL}
@@ -212,4 +212,10 @@ TEA_PROG_TCLSH
 # which require substituting th AC variables in.  Include these here.
 #--------------------------------------------------------------------
 
-AC_OUTPUT([Makefile])
+PKG_RELEASE_LIB="${PACKAGE}${MAJOR_VERSION}${MINOR_VERSION}${SHLIB_SUFFIX}"
+PKG_DEBUG_LIB="${PACKAGE}${MAJOR_VERSION}${MINOR_VERSION}${tcl_dbgx}${SHLIB_SUFFIX}"
+AC_SUBST([PKG_RELEASE_LIB])
+AC_SUBST([PKG_DEBUG_LIB])
+
+
+AC_OUTPUT([Makefile pkgIndex.tcl])

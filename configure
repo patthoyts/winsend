@@ -4466,6 +4466,12 @@ fi
 # which require substituting th AC variables in.  Include these here.
 #--------------------------------------------------------------------
 
+PKG_RELEASE_LIB="${PACKAGE}${MAJOR_VERSION}${MINOR_VERSION}${SHLIB_SUFFIX}"
+PKG_DEBUG_LIB="${PACKAGE}${MAJOR_VERSION}${MINOR_VERSION}${tcl_dbgx}${SHLIB_SUFFIX}"
+
+
+
+
 trap '' 1 2 15
 cat > confcache <<\EOF
 # This file is a shell script that caches the results of configure
@@ -4579,7 +4585,7 @@ done
 ac_given_srcdir=$srcdir
 ac_given_INSTALL="$INSTALL"
 
-trap 'rm -fr `echo "Makefile" | sed "s/:[^ ]*//g"` conftest*; exit 1' 1 2 15
+trap 'rm -fr `echo "Makefile pkgIndex.tcl" | sed "s/:[^ ]*//g"` conftest*; exit 1' 1 2 15
 EOF
 cat >> $CONFIG_STATUS <<EOF
 
@@ -4665,6 +4671,8 @@ s%@MAKE_SHARED_LIB@%$MAKE_SHARED_LIB%g
 s%@MAKE_STATIC_LIB@%$MAKE_STATIC_LIB%g
 s%@MAKE_STUB_LIB@%$MAKE_STUB_LIB%g
 s%@TCLSH_PROG@%$TCLSH_PROG%g
+s%@PKG_RELEASE_LIB@%$PKG_RELEASE_LIB%g
+s%@PKG_DEBUG_LIB@%$PKG_DEBUG_LIB%g
 
 CEOF
 EOF
@@ -4706,7 +4714,7 @@ EOF
 
 cat >> $CONFIG_STATUS <<EOF
 
-CONFIG_FILES=\${CONFIG_FILES-"Makefile"}
+CONFIG_FILES=\${CONFIG_FILES-"Makefile pkgIndex.tcl"}
 EOF
 cat >> $CONFIG_STATUS <<\EOF
 for ac_file in .. $CONFIG_FILES; do if test "x$ac_file" != x..; then
