@@ -20,9 +20,10 @@ static const char rcsid[] =
 #include "WinSendCom.h"
 #include "debug.h"
 
-#ifndef DECLSPEC_EXPORT
-#define DECLSPEC_EXPORT __declspec(dllexport)
-#endif /* ! DECLSPEC_EXPORT */
+#ifdef BUILD_winsend
+#undef TCL_STORAGE_CLASS
+#define TCL_STORAGE_CLASS DLLEXPORT
+#endif /* BUILD_winsend */
 
 /* Should be defined in WTypes.h but mingw 1.0 is missing them */
 #ifndef _ROTFLAGS_DEFINED
@@ -31,7 +32,7 @@ static const char rcsid[] =
 #define ROTFLAGS_ALLOWANYCLIENT           0x02
 #endif /* ! _ROTFLAGS_DEFINED */
 
-#define WINSEND_PACKAGE_VERSION   "0.5"
+#define WINSEND_PACKAGE_VERSION   VERSION
 #define WINSEND_PACKAGE_NAME      "winsend"
 #define WINSEND_CLASS_NAME        "TclEval"
 
@@ -74,30 +75,11 @@ static Tcl_Obj* Winsend_Win32ErrorObj(HRESULT hrError);
 static DWORD WINAPI RegisterNameAsync(void *clientData);
 
 /* -------------------------------------------------------------------------
- * DllMain
- * -------------------------------------------------------------------------
- */
-
-EXTERN_C BOOL APIENTRY
-DllMain(HANDLE hModule, DWORD dwReason, LPVOID lpReserved)
-{
-    switch(dwReason)
-    {
-        case DLL_PROCESS_ATTACH:
-            break;
-        case DLL_PROCESS_DETACH:
-            break;
-    }
-    
-    return TRUE;
-}
-
-/* -------------------------------------------------------------------------
  * Winsend_Init
  * -------------------------------------------------------------------------
  */
 
-EXTERN_C int DECLSPEC_EXPORT
+EXTERN int
 Winsend_Init(Tcl_Interp* interp)
 {
     HRESULT hr = S_OK;
@@ -106,7 +88,7 @@ Winsend_Init(Tcl_Interp* interp)
     WinsendPkg *pkg = NULL;
 
 #ifdef USE_TCL_STUBS
-    Tcl_InitStubs(interp, "8.3", 0);
+    Tcl_InitStubs(interp, "8.1", 0);
 #endif
 
     /* allocate our package structure */
@@ -136,7 +118,9 @@ Winsend_Init(Tcl_Interp* interp)
 
 #ifdef ASYNC_REGISTRATION
     if (SUCCEEDED(hr))
-        hr = CoMarshalInterThreadInterfaceInStream(&IID_IUnknown, pkg->obj, &pkg->stream);
+        hr = CoMarshalInterThreadInterfaceInStream(&IID_IUnknown,
+                                                   pkg->obj,
+                                                   &pkg->stream);
     if (SUCCEEDED(hr))
     {
         DWORD dwThreadID = 0;
@@ -204,7 +188,7 @@ Winsend_Init(Tcl_Interp* interp)
  * Winsend_SafeInit
  * ------------------------------------------------------------------------- */
 
-EXTERN_C int DECLSPEC_EXPORT
+EXTERN int
 Winsend_SafeInit(Tcl_Interp* interp)
 {
     Tcl_SetResult(interp, "not permitted in safe interp", TCL_STATIC);
@@ -590,7 +574,7 @@ Winsend_CmdTest(ClientData clientData, Tcl_Interp *interp,
                  int objc, Tcl_Obj *CONST objv[])
 {
     enum {WINSEND_TEST_ERROR, WINSEND_TEST_OBJECT};
-    static char* cmds[] = { "error", "object", NULL };
+    static CONST char * cmds[] = { "error", "object", NULL };
     int index = 0, r = TCL_OK;
 
     if (objc < 3) {
@@ -758,7 +742,7 @@ RegisterName(LPCOLESTR szName, IUnknown *pUnknown, BOOL bForce,
 
             if (SUCCEEDED(hr)) {
                 hr = pROT->lpVtbl->Register(pROT,
-                                            0 /*ROTFLAGS_REGISTRATIONKEEPSALIVE*/,
+                                            ROTFLAGS_REGISTRATIONKEEPSALIVE,
                                             pUnknown,
                                             pmk,
                                             pdwCookie);
@@ -796,7 +780,9 @@ RegisterNameAsync(void *clientData)
         if (SUCCEEDED(hr))
         {
             IUnknown *pUnknown = NULL;
-            hr = CoGetInterfaceAndReleaseStream(pkg->stream, &IID_IUnknown, &pUnknown);
+            hr = CoGetInterfaceAndReleaseStream(pkg->stream,
+                                                &IID_IUnknown,
+                                                (void**)&pUnknown);
             if (SUCCEEDED(hr))
             {
                 pkg->stream = NULL;
