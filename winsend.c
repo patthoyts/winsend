@@ -3,10 +3,8 @@
 
 /*
  * TODO:
- *   Put the ROT cookie into a client data structure.
- *   Use a C based COM object.
  *   Arrange to register the dispinterface ID?
- *   Check the tkWinSend.c file and implement a Tk send.
+ *   Check the tkWinSend.c file and implement a Tk send then raise a TIP?
  */
 
 static const char rcsid[] =
@@ -110,6 +108,7 @@ Winsend_Init(Tcl_Interp* interp)
     Tcl_InitStubs(interp, "8.3", 0);
 #endif
 
+    /* allocate our package structure */
     pkg = (WinsendPkg*)Tcl_Alloc(sizeof(WinsendPkg));
     if (pkg == NULL) {
         Tcl_SetResult(interp, "out of memory", TCL_STATIC);
@@ -117,7 +116,7 @@ Winsend_Init(Tcl_Interp* interp)
     }
     memset(pkg, 0, sizeof(WinsendPkg));
 
-    /* discover our root name */
+    /* discover our root name - default to 'tcl'*/
     if (Tcl_Eval(interp, "file tail $::argv0") == TCL_OK)
         name = Tcl_GetObjResult(interp);
     if (name == NULL)
