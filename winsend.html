@@ -1,0 +1,68 @@
+<!doctype HTML public "-//W3C//DTD HTML 3.0 Final//EN">
+<html>
+<head>
+<title>WinSend 0.3</title>
+</head>
+
+<body>
+
+<h1>WinSend - A COM Implementation of the Tk Send Command.</h1>
+
+<p>This is a first go at implementing the Tk <i>send</i> command for
+Tk under MS Windows using COM to handle the registration and
+interprocess communication for us. Briefly this package when loaded
+into an interpreter will automatically register the interp in the
+system's running object table. The <tt>winsend interps</tt> command
+can be used to show all the registered interpreters and unlike using
+DDE this command will not be blocked by badly behaving windows
+applications.</p>
+
+<pre>
+An example (from tkcon):         from a concurrent tclsh:
+  % package require winsend  |     % package require winsend
+  0.3                        |     0.3
+  % winsend interps          |     % winsend interps
+  tkcon.tcl                  |     tkcon.tcl TCLSH.EXE
+                             |     % winsend send tkcon.tcl set x 1
+                             |     1
+  % set x                    |
+  1                          |
+  % winsend send TCLSH.EXE set y 2
+                             |     % after 2000 {set zx 1} ; vwait zx
+  2                          |     % set y
+                             |     2
+                             |     % exit
+  % winsend interps          |
+  tkcon.tcl                  |
+</pre>
+
+<p>As you can see from the above session - we require an event loop to be
+running to handle the incoming send. Technically, this is because we
+are using an Apartment threaded object and COM apartments serialize
+access to object by using the Windows message queue. A future version
+could side-step this by creating a free-threaded object but we are
+trying to implement Tk's <i>send</i> here.</p>
+
+<p>An interesting side-effect is that we can access the running Tcl
+interpreter from any COM using scripting language. Here is an example
+of a VB script file you can run using <tt>cscript test.vbs</tt> under
+windows. It will also work from MS Words macro editor etc. You need to
+start up an interpreter and load the winsend package (for instance -
+using tkcon):</p>
+
+<pre>Set interp = GetObject("\\.\TclInterp\tkcon.tcl")
+interp.Send "puts {Hello from VB Script}"
+WScript.Echo interp.Send("info tcl")</pre>
+
+<p>You should see the message printed in your tkcon window and see your
+Tcl version printed in your DOS box.</p>
+
+<p>The package containing binaries and source is available from 
+<a href="http://tclsoap.sf.net/winsend03.zip">
+http://tclsoap.sf.net/winsend03.zip</a></p>
+
+<p>Pat Thoyts.</p>
+
+
+</body>
+</html>
