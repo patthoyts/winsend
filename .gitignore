@@ -1,0 +1,8 @@
+.cvsignore
+Debug
+Release
+*.ilk
+*.dll
+win/nmakehlp.exe
+win/nmakehlp.obj
+win/version.vc
